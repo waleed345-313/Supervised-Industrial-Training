@@ -7,10 +7,10 @@
 ---
 
 ## 🚀 About Me
-- 🔭 Currently working on **Supervised Industrial Training (SIT) Project**
-- 🌱 Learning **Advanced React Native, MERN Stack, Firebase**
-- 💬 Ask me about **React Native, Node.js, MongoDB, PHP, MySQL**
-- 🎯 Goal: Becoming a Professional Full Stack Developer
+- 🔭 Working on **Supervised Industrial Training (SIT) Project**
+- 🌱 Learning **React Native, MERN Stack, Firebase**
+- 💬 Ask me about **React, Node.js, MongoDB, PHP, MySQL**
+- 🎯 Goal: Become a **Professional Full Stack Developer**
 
 ---
 
@@ -24,7 +24,7 @@
 
 ---
 
-## 🔥 GitHub Streak
+## 🔥 Streak Stats
 ![GitHub Streak](https://github-readme-streak-stats.herokuapp.com/?user=waleed345-313&theme=tokyonight&hide_border=true)
 
 ---
@@ -35,7 +35,7 @@
 ---
 
 ## 🏆 GitHub Trophies
-![Trophy](https://github-profile-trophy.vercel.app/?username=waleed345-313&theme=tokyonight&no-frame=true&row=1)
+![Trophies](https://github-profile-trophy.vercel.app/?username=waleed345-313&theme=tokyonight&no-frame=true&row=1)
 
 ---
 
@@ -52,12 +52,12 @@
 ---
 
 ## 🐍 Contribution Snake Animation
-![Snake animation](https://raw.githubusercontent.com/waleed345-313/waleed345-313/output/github-contribution-grid-snake.svg) 
+![Snake animation](https://raw.githubusercontent.com/waleed345-313/waleed345-313/output/github-contribution-grid-snake.svg)
 
 ---
 
 ## ⚡ Fun Fact
-"Code, Creativity, and Consistency build success."
+> “Code, Practice, and Consistency build a strong developer.”
 
 ---
 # Supervised-Industrial-Training
