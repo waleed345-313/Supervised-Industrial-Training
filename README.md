@@ -1,78 +1,61 @@
-<<<<<<< HEAD
-# Welcome to your Lovable project
+# Supervised-Industrial-Training
 
-## Project info
+<p align="center">
+  <img src="https://readme-typing-svg.herokuapp.com?font=Poppins&weight=700&size=30&pause=1000&color=0EA5E9&center=true&vCenter=true&width=900&lines=Supervised+Industrial+Training+Platform;Internship+Management+Made+Smart+and+Efficient;Students+%7C+Universities+%7C+Companies+Connected" alt="Typing SVG" />
+</p>
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Active-success?style=for-the-badge" alt="Status Badge" />
+  <img src="https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-1f6feb?style=for-the-badge" alt="Frontend Badge" />
+  <img src="https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-0f766e?style=for-the-badge" alt="Backend Badge" />
+  <img src="https://img.shields.io/badge/Database-MongoDB-166534?style=for-the-badge" alt="Database Badge" />
+</p>
 
-## How can I edit this code?
+## Overview
 
-There are several ways of editing your application.
+Supervised Industrial Training (SIT) is a web-based internship management platform that connects **students**, **universities**, and **companies** in one integrated workflow.
 
-**Use Lovable**
+It simplifies the full training lifecycle: application, placement, supervision, communication, evaluations, and progress tracking.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Key Features
 
-Changes made via Lovable will be committed automatically to this repo.
+- Internship application and placement workflow
+- Multi-role dashboards for students and supervisors
+- Real-time communication support
+- Evaluation and grading management
+- Progress and report tracking
 
-**Use your preferred IDE**
+## Tech Stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **Frontend:** React, TypeScript, Tailwind CSS, shadcn-ui, Vite
+- **Backend:** Node.js, Express
+- **Database:** MongoDB
+- **Realtime:** Socket.IO
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Getting Started
 
-Follow these steps:
+### Prerequisites
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+- Node.js (LTS recommended)
+- npm
+
+### Frontend Setup
+
+```bash
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+cd Supervised-Industrial-Training
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Backend Setup
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+cd backend
+npm install
+npm run dev
+```
 
-**Use GitHub Codespaces**
+## Project Goal
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
-=======
-# Supervised-Industrial-Training
-Supervised Industrial Training (SIT) is a web-based platform that automates internship management by connecting students, universities, and companies. It streamlines applications, placements, evaluations, and progress tracking for efficient industrial training.
->>>>>>> 9569aba4a57d5e0afa080516aca7e4842bbbbf7f
+To deliver a professional, transparent, and scalable internship supervision system that improves collaboration and decision-making across all stakeholders.
