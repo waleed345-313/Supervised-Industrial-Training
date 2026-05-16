@@ -20,7 +20,7 @@
 ---
 
 ## 📊 GitHub Stats
-![GitHub stats](https://github-readme-stats.vercel.app/api?username=waleed345-313&show_icons=true&theme=tokyonight&hide_border=true)
+![GitHub stats](https://github-readme-stats.vercel.app/api?username=waleed345-313&show_icons=true&theme=tokyonight&hide_border=true&cache_seconds=1800)
 
 ---
 
