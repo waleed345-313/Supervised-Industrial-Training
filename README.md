@@ -60,6 +60,12 @@ cd Supervised-Industrial-Training
 
 ### 2) Frontend setup
 
+Create `/Supervised-Industrial-Training/.env`:
+
+```bash
+VITE_API_BASE=http://localhost:5000
+```
+
 ```bash
 npm install
 npm run dev
@@ -67,13 +73,19 @@ npm run dev
 
 ### 3) Backend setup
 
+Create `/Supervised-Industrial-Training/backend/.env`:
+
+```bash
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/test
+JWT_SECRET=replace_with_a_strong_secret
+```
+
 ```bash
 cd backend
 npm install
 npm run dev
 ```
-
-> Create and configure `.env` files for both frontend and backend before running in production environments.
 
 ## Available Scripts
 
