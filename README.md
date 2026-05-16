@@ -11,8 +11,6 @@
   <img src="https://img.shields.io/badge/Database-MongoDB-166534?style=for-the-badge" alt="Database Badge" />
 </p>
 
-<p align="center"><strong>Current project status:</strong> Active development</p>
-
 ## Overview
 
 Supervised Industrial Training (SIT) is a web-based internship management platform that connects **students**, **universities**, and **companies** in one integrated workflow.
@@ -44,7 +42,7 @@ It simplifies the full training lifecycle: application, placement, supervision, 
 ### Frontend Setup
 
 ```bash
-git clone https://github.com/<your-username>/Supervised-Industrial-Training.git
+git clone https://github.com/waleed345-313/Supervised-Industrial-Training.git
 cd Supervised-Industrial-Training
 npm install
 npm run dev
