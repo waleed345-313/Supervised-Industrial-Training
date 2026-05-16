@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Welcome to your Lovable project
 
 ## Project info
@@ -71,3 +72,7 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+=======
+# Supervised-Industrial-Training
+Supervised Industrial Training (SIT) is a web-based platform that automates internship management by connecting students, universities, and companies. It streamlines applications, placements, evaluations, and progress tracking for efficient industrial training.
+>>>>>>> 9569aba4a57d5e0afa080516aca7e4842bbbbf7f
