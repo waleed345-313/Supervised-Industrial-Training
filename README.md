@@ -1,78 +1,108 @@
-<<<<<<< HEAD
-# Welcome to your Lovable project
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0ea5e9,100:2563eb&text=Supervised%20Industrial%20Training&fontColor=ffffff&fontAlignY=35&desc=Smart%20Internship%20Management%20Platform&descAlignY=55&animation=fadeIn" alt="SIT Banner" />
+</p>
 
-## Project info
+<p align="center">
+  <img src="https://readme-typing-svg.herokuapp.com?font=Poppins&weight=600&size=22&duration=3000&pause=700&color=2563EB&center=true&vCenter=true&width=700&lines=Connecting+Students%2C+Universities%2C+and+Industry;Automating+Applications%2C+Placements%2C+and+Evaluations;Improving+Visibility+Across+the+Training+Lifecycle" alt="Typing Animation" />
+</p>
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+<p align="center">
+  <a href="https://github.com/waleed345-313/Supervised-Industrial-Training">
+    <img src="https://img.shields.io/badge/status-active-success" alt="Status" />
+  </a>
+  <img src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB?logo=react&logoColor=white" alt="Frontend" />
+  <img src="https://img.shields.io/badge/backend-Node.js%20%2B%20Express-339933?logo=node.js&logoColor=white" alt="Backend" />
+  <img src="https://img.shields.io/badge/database-MongoDB-47A248?logo=mongodb&logoColor=white" alt="Database" />
+</p>
 
-## How can I edit this code?
+## Overview
 
-There are several ways of editing your application.
+**Supervised Industrial Training (SIT)** is a web-based internship management platform that connects students, universities, and companies in one workflow.
 
-**Use Lovable**
+It helps stakeholders manage:
+- Internship applications
+- Placement decisions
+- Progress and supervision
+- Evaluations and final grading
+- Communication and reporting
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Key Features
 
-Changes made via Lovable will be committed automatically to this repo.
+- Role-based dashboards for students, supervisors, placement managers, focal persons, and admins
+- Internship posting, application, and assignment workflows
+- Evaluation and grading support
+- Progress tracking and reporting
+- Real-time communication capabilities (Socket.IO integration)
 
-**Use your preferred IDE**
+## Tech Stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Frontend
+- React + TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Backend
+- Node.js
+- Express.js
+- MongoDB (Mongoose)
+- JWT Authentication
+- Socket.IO
 
-Follow these steps:
+## Getting Started
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 1) Clone the repository
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+```bash
+git clone https://github.com/waleed345-313/Supervised-Industrial-Training.git
+cd Supervised-Industrial-Training
+```
 
-# Step 3: Install the necessary dependencies.
-npm i
+### 2) Frontend setup
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### 3) Backend setup
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+cd backend
+npm install
+npm run dev
+```
 
-**Use GitHub Codespaces**
+> Create and configure `.env` files for both frontend and backend before running in production environments.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Available Scripts
 
-## What technologies are used for this project?
+From the project root:
 
-This project is built with:
+- `npm run dev` — Start frontend dev server
+- `npm run build` — Build frontend for production
+- `npm run lint` — Run ESLint checks
+- `npm run preview` — Preview production frontend build
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+From the `backend` directory:
 
-## How can I deploy this project?
+- `npm run dev` — Start backend with nodemon
+- `npm start` — Start backend with node
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Project Structure
 
-## Can I connect a custom domain to my Lovable project?
+```text
+Supervised-Industrial-Training/
+├── src/              # Frontend source code
+├── backend/          # Node/Express backend
+├── public/           # Static assets
+└── README.md
+```
 
-Yes, you can!
+## Contributing
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Contributions are welcome. Please open an issue to discuss major changes before submitting a pull request.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
-=======
-# Supervised-Industrial-Training
-Supervised Industrial Training (SIT) is a web-based platform that automates internship management by connecting students, universities, and companies. It streamlines applications, placements, evaluations, and progress tracking for efficient industrial training.
->>>>>>> 9569aba4a57d5e0afa080516aca7e4842bbbbf7f
+## License
+
+This project is currently unlicensed. Add a license file (e.g., MIT) if you plan to distribute it publicly.
