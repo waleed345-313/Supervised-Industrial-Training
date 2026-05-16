@@ -1,20 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mockNotifications } from '@/data/mockData';
-import { Bell, Check, Info, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { useRealtimeStudentNotifications } from '@/hooks/use-realtime-data';
+import { markNotificationAsRead } from '@/lib/api';
+import { Bell, Check, Info, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function StudentNotifications() {
-  const [notifications, setNotifications] = useState(mockNotifications);
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  date: string;
+  read: boolean;
+}
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+export default function StudentNotifications() {
+  const { data: notificationsData, loading, error, refresh } = useRealtimeStudentNotifications();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Sync local state with real-time data
+  useEffect(() => {
+    if (notificationsData) {
+      setNotifications(notificationsData);
+    }
+  }, [notificationsData]);
+
+  const markAsRead = async (id: string) => {
+    try {
+      await markNotificationAsRead(id);
+      setNotifications(prev =>
+        prev.map(n => n.id === id ? { ...n, read: true } : n)
+      );
+    } catch (error) {
+      // Still update UI even if API fails
+      setNotifications(prev =>
+        prev.map(n => n.id === id ? { ...n, read: true } : n)
+      );
+    }
   };
 
   const markAllAsRead = () => {
@@ -43,12 +69,18 @@ export default function StudentNotifications() {
           title="Notifications"
           description="Stay updated with your internship activities"
           action={
-            unreadCount > 0 && (
-              <Button variant="outline" onClick={markAllAsRead}>
-                <Check className="mr-2 h-4 w-4" />
-                Mark all as read
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+                <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+                Refresh
               </Button>
-            )
+              {unreadCount > 0 && (
+                <Button variant="outline" onClick={markAllAsRead}>
+                  <Check className="mr-2 h-4 w-4" />
+                  Mark all as read
+                </Button>
+              )}
+            </div>
           }
         />
 
@@ -73,6 +105,16 @@ export default function StudentNotifications() {
             <CardTitle>All Notifications</CardTitle>
           </CardHeader>
           <CardContent>
+            {error && (
+              <div className="py-8 text-center">
+                <p className="text-destructive">Failed to load notifications</p>
+                <Button variant="outline" size="sm" onClick={refresh} className="mt-2">
+                  Retry
+                </Button>
+              </div>
+            )}
+
+            {!error && (
             <div className="space-y-4">
               {notifications.map((notification) => (
                 <div
@@ -123,6 +165,7 @@ export default function StudentNotifications() {
                 </div>
               )}
             </div>
+            )}
           </CardContent>
         </Card>
       </div>

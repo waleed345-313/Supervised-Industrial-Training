@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from '@/components/dashboards/AdminDashboard';
 import { ManagerPlacementsDashboard } from '@/components/dashboards/ManagerPlacementsDashboard';
 import { UniversityFocalDashboard } from '@/components/dashboards/UniversityFocalDashboard';
@@ -11,9 +12,16 @@ import { StudentDashboard } from '@/components/dashboards/StudentDashboard';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export default function Dashboard() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, initialSessionResolved } = useAuth();
 
-  // Redirect to login if not authenticated
+  if (!initialSessionResolved) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-label="Loading session" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }

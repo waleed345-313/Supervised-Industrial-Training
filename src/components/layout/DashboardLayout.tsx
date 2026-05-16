@@ -1,17 +1,40 @@
+import { useEffect } from 'react';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { Bell } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Loader2 } from 'lucide-react';
+import { NotificationBell } from '@/components/shared/NotificationBell';
+import { io, type Socket } from 'socket.io-client';
+import { API_BASE } from '@/lib/api';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, initialSessionResolved, refreshSessionUser } = useAuth();
+
+  useEffect(() => {
+    if (user?.role !== 'student') return;
+    const token = localStorage.getItem('sit_portal_token');
+    if (!token) return;
+    const socket: Socket = io(API_BASE, { auth: { token } });
+    const onStudent = () => void refreshSessionUser();
+    socket.on('student:update', onStudent);
+    return () => {
+      socket.off('student:update', onStudent);
+      socket.disconnect();
+    };
+  }, [user?.role, refreshSessionUser]);
+
+  if (!initialSessionResolved) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-label="Loading session" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -29,12 +52,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <h1 className="text-sm font-medium">Supervised Industrial Training Portal</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-4 w-4" />
-                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
-                  3
-                </Badge>
-              </Button>
+              <NotificationBell />
             </div>
           </header>
           <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">

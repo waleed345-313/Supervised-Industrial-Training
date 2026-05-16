@@ -1,59 +1,62 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { User, UserRole, Student } from '@/types';
-import { mockUsers, mockStudents } from '@/data/mockData';
+import { User, Student } from '@/types';
+import api from '@/lib/api';
 
 interface AuthContextType {
   user: User | Student | null;
   isAuthenticated: boolean;
+  /** False until the first run has finished reading token/session and optional restore fetch */
+  initialSessionResolved: boolean;
+  /** Reload user from `/api/users/:id` (includes Student.currentStatus / sitPhase after uploads). */
+  refreshSessionUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  loginAsRole: (role: UserRole) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'sit_portal_users';
 const SESSION_KEY = 'sit_portal_session';
-
-// Load users from localStorage or use mock data
-const getAllUsers = (): (User | Student)[] => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const storedUsers = JSON.parse(stored);
-      // Merge with mock data, giving priority to stored users (avoid duplicates by email)
-      const allMockUsers = [...mockUsers, ...mockStudents];
-      const mockEmails = new Set(allMockUsers.map(u => u.email));
-      const newStoredUsers = storedUsers.filter((u: User | Student) => !mockEmails.has(u.email));
-      return [...allMockUsers, ...newStoredUsers];
-    }
-  } catch (error) {
-    console.error('Error loading users from localStorage:', error);
-  }
-  return [...mockUsers, ...mockStudents];
-};
+const TOKEN_KEY = 'sit_portal_token';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Load user from session on mount
-  const [user, setUser] = useState<User | Student | null>(() => {
-    try {
-      const session = localStorage.getItem(SESSION_KEY);
-      if (session) {
-        const sessionData = JSON.parse(session);
-        // Verify user still exists in the system
-        const allUsers = getAllUsers();
-        const foundUser = allUsers.find(u => u.id === sessionData.userId);
-        if (foundUser) {
-          return foundUser;
-        }
-      }
-    } catch (error) {
-      console.error('Error loading session:', error);
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | Student | null>(null);
+  const [initialSessionResolved, setInitialSessionResolved] = useState(false);
 
-  // Save session when user changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem(TOKEN_KEY);
+        const session = localStorage.getItem(SESSION_KEY);
+        if (!token || !session) {
+          if (!token) {
+            localStorage.removeItem(SESSION_KEY);
+          }
+          return;
+        }
+
+        const sessionData = JSON.parse(session) as { userId?: string };
+        if (!sessionData?.userId) {
+          localStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem(TOKEN_KEY);
+          return;
+        }
+
+        const fetchedUser = await api.getUserById(sessionData.userId);
+        if (!cancelled) setUser(fetchedUser);
+      } catch (error) {
+        console.warn('Could not restore session from API', error);
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+      } finally {
+        if (!cancelled) setInitialSessionResolved(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (user) {
       try {
@@ -67,68 +70,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    // Input validation
-    if (!email || !email.trim()) {
-      return false;
-    }
-    
-    if (!password || !password.trim()) {
-      return false;
-    }
-
-    // Email format validation - Gmail format with dots allowed in username, but must end exactly with @gmail.com
-    const emailRegex = /^[a-zA-Z0-9.]+@gmail\.com$/;
-    if (!emailRegex.test(email.trim())) {
-      return false;
-    }
-
-    // Get all users (from localStorage + mock data)
-    const allUsers = getAllUsers();
-    
-    // Find user by email (case-insensitive)
-    const foundUser = allUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-    
-    if (foundUser) {
-      // Check if user has a password set (admin-created users will have password)
-      if ((foundUser as User).password) {
-        // Validate password for admin-created users (exact match)
-        if ((foundUser as User).password === password) {
-          setUser(foundUser);
-          return true;
-        }
-        return false; // Password doesn't match
-      } else {
-        // For mock users without password, allow login with any password (backward compatibility)
-        // But still require password to be provided
-        if (password.trim().length > 0) {
-          setUser(foundUser);
-          return true;
-        }
-        return false;
+    try {
+      const res = await api.login(email, password);
+      if (res && res.token && res.user) {
+        localStorage.setItem(TOKEN_KEY, res.token);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: res.user.id }));
+        setUser(res.user);
+        return true;
       }
+      return false;
+    } catch (err) {
+      console.error('Login error:', err);
+      return false;
     }
-    return false; // User not found
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   }, []);
 
-  const loginAsRole = useCallback((role: UserRole) => {
-    // Quick login for demo purposes
-    if (role === 'student') {
-      setUser(mockStudents[0]);
-    } else {
-      const foundUser = mockUsers.find(u => u.role === role);
-      if (foundUser) {
-        setUser(foundUser);
-      }
+  const refreshSessionUser = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+    try {
+      const sessionRaw = localStorage.getItem(SESSION_KEY);
+      if (!sessionRaw) return;
+      const parsed = JSON.parse(sessionRaw) as { userId?: string };
+      if (!parsed?.userId) return;
+      const fetched = await api.getUserById(parsed.userId);
+      setUser(fetched);
+    } catch {
+      console.warn('Could not refresh session user');
     }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, loginAsRole }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        initialSessionResolved,
+        refreshSessionUser,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

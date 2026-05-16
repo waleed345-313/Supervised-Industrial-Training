@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -10,8 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { mockInternships } from '@/data/mockData';
-import { Search, MapPin, Clock, DollarSign, Building2, Users, Calendar, Upload, FileText, X, AlertCircle } from 'lucide-react';
+import { Search, MapPin, Clock, DollarSign, Building2, Users, Calendar, Upload, FileText, X, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,12 +19,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Internship, Student } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import api from '@/lib/api';
+import { mapInternshipFromApi } from '@/lib/internshipMap';
+import { getApplicationDeadline } from '@/lib/api';
 
 const applicationSchema = z.object({
   coverLetter: z.string().min(100, "Cover letter must be at least 100 characters").max(2000, "Cover letter must be less than 2000 characters"),
   whyInterested: z.string().min(50, "Please provide at least 50 characters").max(500, "Response must be less than 500 characters"),
   relevantExperience: z.string().min(30, "Please provide at least 30 characters").max(500, "Response must be less than 500 characters"),
-  availableStartDate: z.string().min(1, "Please select a start date"),
 });
 
 type ApplicationFormData = z.infer<typeof applicationSchema>;
@@ -39,16 +40,64 @@ export default function StudentInternships() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedInternship, setSelectedInternship] = useState<Internship | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [applicationCount, setApplicationCount] = useState(student?.applicationCount || 0);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [internships, setInternships] = useState<Internship[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [globalDeadline, setGlobalDeadline] = useState<string>('');
   const { toast } = useToast();
-  
-  const maxApplications = 3; // FR-22: Student can only apply for 3 opportunities
+
+  const applicationCount = applications.length;
+
+  useEffect(() => {
+    const fetchInternships = async () => {
+      try {
+        setIsLoading(true);
+        // Pass student's gender to filter internships based on gender preference
+        const raw = await api.getInternships({ 
+          openOnly: true,
+          studentGender: student?.gender 
+        });
+        let list: Internship[] = [];
+        if (Array.isArray(raw)) {
+          try {
+            list = raw.map((r) => mapInternshipFromApi(r as Record<string, unknown>));
+          } catch (mapErr) {
+            console.error('Error mapping internships:', mapErr);
+            list = [];
+          }
+        }
+        setInternships(list);
+
+        const deadlineRes = await getApplicationDeadline();
+        setGlobalDeadline(String((deadlineRes as any)?.value || ''));
+      } catch (error) {
+        console.error('Error fetching internships:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load internships data.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInternships();
+  }, [toast, student?.gender]);
+
+  const maxApplications = student?.maxApplications ?? 2;
   const canApply = applicationCount < maxApplications;
+  const isAfterGlobalDeadline = (() => {
+    if (!globalDeadline || globalDeadline === 'undefined') return false;
+    const d = new Date(globalDeadline);
+    if (isNaN(d.getTime())) return false;
+    return Date.now() > d.getTime();
+  })();
 
-  const specializations = [...new Set(mockInternships.flatMap(i => i.specializations))];
-  const locations = [...new Set(mockInternships.map(i => i.location))];
+  const specializations = [...new Set(internships.flatMap(i => i.specializations || []))];
+  const locations = [...new Set(internships.map(i => i.location).filter(Boolean))];
 
-  const filteredInternships = mockInternships.filter(internship => {
+  const filteredInternships = internships.filter(internship => {
     const matchesSearch = internship.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       internship.company.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSpecialization = specializationFilter === 'all' || 
@@ -64,7 +113,6 @@ export default function StudentInternships() {
       coverLetter: "",
       whyInterested: "",
       relevantExperience: "",
-      availableStartDate: "",
     },
   });
 
@@ -104,7 +152,7 @@ export default function StudentInternships() {
     }
   };
 
-  const onSubmit = (data: ApplicationFormData) => {
+  const onSubmit = async (data: ApplicationFormData) => {
     if (!resumeFile) {
       toast({
         title: "Resume required",
@@ -114,16 +162,57 @@ export default function StudentInternships() {
       return;
     }
 
-    setApplicationCount(prev => prev + 1);
-    toast({
-      title: 'Application Submitted',
-      description: `Your application for ${selectedInternship?.title} has been submitted successfully. You have ${maxApplications - applicationCount - 1} application(s) remaining.`,
-    });
-    
-    setIsDialogOpen(false);
-    setSelectedInternship(null);
-    setResumeFile(null);
-    form.reset();
+    if (!selectedInternship) return;
+    if (!student?.id) {
+      toast({ title: 'Session error', description: 'Please sign in again.', variant: 'destructive' });
+      return;
+    }
+
+    const remarks = [
+      `Resume (file name): ${resumeFile.name}`,
+      `Cover letter:\n${data.coverLetter}`,
+      `Why interested:\n${data.whyInterested}`,
+      `Relevant experience:\n${data.relevantExperience}`,
+    ].join('\n\n---\n\n');
+
+    try {
+      // Create application first
+      const newApplication = await api.createApplication({
+        studentId: student.id,
+        studentName: student.name || 'Student',
+        internshipId: selectedInternship.id,
+        internshipTitle: selectedInternship.title,
+        companyName: selectedInternship.company.name,
+        remarks,
+      });
+
+      // Upload resume file if application was created successfully
+      if (resumeFile && newApplication?.id) {
+        const formData = new FormData();
+        formData.append('file', resumeFile);
+        formData.append('applicationId', newApplication.id);
+        await api.uploadStudentResume(formData);
+      }
+
+      // Refresh applications to get the updated count
+      const updatedApps = await api.getStudentApplications();
+      setApplications(updatedApps || []);
+      toast({
+        title: 'Application Submitted',
+        description: `Your application for ${selectedInternship.title} has been submitted. You have ${Math.max(0, maxApplications - applications.length - 1)} application(s) remaining.`,
+      });
+      setIsDialogOpen(false);
+      setSelectedInternship(null);
+      setResumeFile(null);
+      form.reset();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not submit application.';
+      toast({
+        title: 'Application failed',
+        description: message.replace(/^\[object Object\]$/, 'Please try again or check your application limit.'),
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -138,13 +227,33 @@ export default function StudentInternships() {
         <Alert variant={canApply ? "default" : "destructive"}>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {canApply 
+            {canApply
               ? `You have applied to ${applicationCount} of ${maxApplications} allowed SIT opportunities. You can apply to ${maxApplications - applicationCount} more.`
               : `You have reached the maximum of ${maxApplications} applications for this SIT selection cycle.`
             }
           </AlertDescription>
         </Alert>
 
+        {globalDeadline && (
+          <Alert variant={isAfterGlobalDeadline ? "destructive" : "default"}>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Applying deadline for this cycle: <span className="font-medium">{globalDeadline}</span>
+              {isAfterGlobalDeadline ? ' (closed)' : ''}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Loading State */}
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">Loading internships...</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
@@ -198,7 +307,7 @@ export default function StudentInternships() {
                   {/* Left Section */}
                   <div className="flex gap-4">
                     <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-lg flex-shrink-0">
-                      {internship.company.name[0]}
+                      {internship.company?.name?.[0] || '?'}
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -207,15 +316,15 @@ export default function StudentInternships() {
                       </div>
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Building2 className="h-4 w-4" />
-                        <span className="font-medium">{internship.company.name}</span>
+                        <span className="font-medium">{internship.company?.name || 'Unknown'}</span>
                         <span className="text-muted-foreground/50">•</span>
-                        <span>{internship.company.industry}</span>
+                        <span>{internship.company?.industry || ''}</span>
                       </div>
                       <p className="text-muted-foreground max-w-2xl">{internship.description}</p>
                       
                       {/* Tags */}
                       <div className="flex flex-wrap gap-2 pt-2">
-                        {internship.specializations.map((spec) => (
+                        {(internship.specializations || []).map((spec) => (
                           <Badge key={spec} variant="secondary">{spec}</Badge>
                         ))}
                       </div>
@@ -237,17 +346,19 @@ export default function StudentInternships() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <span>{internship.seats} seats available</span>
                       </div>
-                      <div className="flex items-center gap-2 lg:justify-end col-span-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span>Deadline: {internship.deadline}</span>
-                      </div>
+                      {globalDeadline && (
+                        <div className="flex items-center gap-2 lg:justify-end col-span-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span>Deadline: {globalDeadline}</span>
+                        </div>
+                      )}
                     </div>
                     <Button 
                       className="w-full lg:w-auto"
-                      disabled={internship.status !== 'open'}
+                      disabled={internship.status !== 'open' || isAfterGlobalDeadline}
                       onClick={() => handleApplyClick(internship)}
                     >
-                      {internship.status === 'open' ? 'Apply Now' : 'Closed'}
+                      {internship.status === 'open' && !isAfterGlobalDeadline ? 'Apply Now' : 'Closed'}
                     </Button>
                   </div>
                 </div>
@@ -256,7 +367,26 @@ export default function StudentInternships() {
                 <div className="mt-4 pt-4 border-t">
                   <p className="text-sm font-medium mb-2">Requirements:</p>
                   <ul className="text-sm text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                    {internship.requirements.map((req, index) => (
+                    {/* Hard Requirements */}
+                    {internship.cgpa && (
+                      <li className="flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        CGPA: {internship.cgpa}
+                      </li>
+                    )}
+                    {internship.gender && internship.gender !== 'Customized' && (
+                      <li className="flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        Gender: {internship.gender}
+                      </li>
+                    )}
+                    {internship.interview === 'Yes' && (
+                      <li className="flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        Interview Required
+                      </li>
+                    )}
+                    {(internship.requirements || []).map((req, index) => (
                       <li key={index} className="flex items-center gap-1">
                         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                         {req}
@@ -288,6 +418,9 @@ export default function StudentInternships() {
             
             {selectedInternship && (
               <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+                {student?.cnicNumber && (
+                  <p className="text-sm text-muted-foreground mb-2">Your CNIC: {student.cnicNumber}</p>
+                )}
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold">
                     {selectedInternship.company.name[0]}
@@ -405,20 +538,6 @@ export default function StudentInternships() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="availableStartDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Earliest Available Start Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <div className="flex justify-end gap-3">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
@@ -429,6 +548,8 @@ export default function StudentInternships() {
             </Form>
           </DialogContent>
         </Dialog>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

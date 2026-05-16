@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,10 +12,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { mockStudents, mockCompanies } from '@/data/mockData';
-import { MessageSquare, Send, Eye, Pencil } from 'lucide-react';
+import { MessageSquare, Send, Eye, Pencil, Loader2 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
+import { Student } from '@/types';
+import api, { API_BASE, getCompanyFeedbackForCompany, submitCompanyFeedback } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { io, type Socket } from 'socket.io-client';
 
 const feedbackSchema = z.object({
   studentId: z.string().min(1, "Please select a student"),
@@ -24,7 +27,7 @@ const feedbackSchema = z.object({
   professionalismRating: z.number().min(1).max(10),
   technicalSkillsRating: z.number().min(1).max(10),
   communicationRating: z.number().min(1).max(10),
-  remarks: z.string().min(10, "Please provide detailed remarks (at least 10 characters)").max(500, "Remarks must be less than 500 characters"),
+  remarks: z.string().max(500, "Remarks must be less than 500 characters").optional(),
   recommendation: z.string().min(1, "Please select a recommendation"),
 });
 
@@ -37,34 +40,52 @@ const recommendations = [
   { value: 'not_recommend', label: 'Do Not Recommend' },
 ];
 
-// Mock feedback data
-const mockFeedback = [
-  {
-    id: '1',
-    studentId: 'std1',
-    studentName: 'Ahmad Ibrahim',
-    overallScore: 8.5,
+interface FeedbackItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  overallScore: number;
+  status: 'submitted' | 'draft';
+  submittedDate: string | null;
+  recommendation: string;
+  remarks?: string;
+  performanceRating: number;
+  attendanceRating: number;
+  professionalismRating: number;
+  technicalSkillsRating: number;
+  communicationRating: number;
+}
+
+function mapCompanyFeedbackApi(row: Record<string, unknown>): FeedbackItem | null {
+  if (!row?.id || !row.studentId) return null;
+  return {
+    id: String(row.id),
+    studentId: String(row.studentId),
+    studentName: String(row.studentName ?? ''),
+    overallScore: Number(row.overallScore),
     status: 'submitted',
-    submittedDate: '2024-02-15',
-    recommendation: 'highly_recommend',
-  },
-  {
-    id: '2',
-    studentId: 'std2',
-    studentName: 'Sarah Lee',
-    overallScore: 7.8,
-    status: 'draft',
-    submittedDate: null,
-    recommendation: 'recommend',
-  },
-];
+    submittedDate:
+      row.submittedDate != null && row.submittedDate !== ''
+        ? String(row.submittedDate)
+        : null,
+    recommendation: String(row.recommendation ?? 'neutral'),
+    remarks: typeof row.remarks === 'string' ? row.remarks : '',
+    performanceRating: Number(row.performanceRating),
+    attendanceRating: Number(row.attendanceRating),
+    professionalismRating: Number(row.professionalismRating),
+    technicalSkillsRating: Number(row.technicalSkillsRating),
+    communicationRating: Number(row.communicationRating),
+  };
+}
 
 export default function CompanyFeedback() {
+  const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingFeedback, setEditingFeedback] = useState<typeof mockFeedback[0] | null>(null);
+  const [editingFeedback, setEditingFeedback] = useState<FeedbackItem | null>(null);
+  const [feedbackList, setFeedbackList] = useState<FeedbackItem[]>([]);
+  const [allocatedStudents, setAllocatedStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  
-  const allocatedStudents = mockStudents.filter(s => s.currentStatus === 'allocated');
 
   const form = useForm<FeedbackFormData>({
     resolver: zodResolver(feedbackSchema),
@@ -76,9 +97,67 @@ export default function CompanyFeedback() {
       technicalSkillsRating: 5,
       communicationRating: 5,
       remarks: "",
-      recommendation: "",
+      recommendation: '',
     },
   });
+
+  // Load real data
+  const loadData = useCallback(async () => {
+    if (!user?.companyId) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const [studentsData, feedbackRaw] = await Promise.all([
+        api.getStudentsForMyCompany(),
+        getCompanyFeedbackForCompany().catch(() => []),
+      ]);
+      const allocated = (studentsData || []).filter((s: Student) => s.currentStatus === 'allocated');
+      setAllocatedStudents(allocated);
+
+      const rows = Array.isArray(feedbackRaw) ? feedbackRaw : [];
+      const mapped = rows
+        .map((row) => mapCompanyFeedbackApi(row as Record<string, unknown>))
+        .filter((x): x is FeedbackItem => x !== null);
+      setFeedbackList(mapped);
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: 'Could not load students',
+        description: 'Check that you are logged in as a company focal.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast, user?.companyId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Real-time updates via socket
+  useEffect(() => {
+    const token = localStorage.getItem('sit_portal_token');
+    if (!token || !user?.companyId) return;
+    
+    const socket: Socket = io(API_BASE, { auth: { token } });
+    
+    const onCompanyUpdate = (payload: { type?: string }) => {
+      if (payload?.type === 'students' || payload?.type === 'allocations') {
+        loadData();
+      }
+    };
+    
+    socket.on('company:update', onCompanyUpdate);
+    
+    return () => {
+      socket.off('company:update', onCompanyUpdate);
+      socket.disconnect();
+    };
+  }, [user?.companyId, loadData]);
 
   const handleCreate = () => {
     setEditingFeedback(null);
@@ -95,38 +174,60 @@ export default function CompanyFeedback() {
     setIsDialogOpen(true);
   };
 
-  const handleEdit = (feedback: typeof mockFeedback[0]) => {
+  const handleEdit = (feedback: FeedbackItem) => {
     setEditingFeedback(feedback);
     form.reset({
       studentId: feedback.studentId,
-      performanceRating: 8,
-      attendanceRating: 9,
-      professionalismRating: 8,
-      technicalSkillsRating: 8,
-      communicationRating: 9,
-      remarks: "Good performance overall",
+      performanceRating: feedback.performanceRating,
+      attendanceRating: feedback.attendanceRating,
+      professionalismRating: feedback.professionalismRating,
+      technicalSkillsRating: feedback.technicalSkillsRating,
+      communicationRating: feedback.communicationRating,
+      remarks: feedback.remarks || '',
       recommendation: feedback.recommendation,
     });
     setIsDialogOpen(true);
   };
 
-  const onSubmit = (data: FeedbackFormData) => {
-    const avgScore = (
-      data.performanceRating +
-      data.attendanceRating +
-      data.professionalismRating +
-      data.technicalSkillsRating +
-      data.communicationRating
-    ) / 5;
+  const onSubmit = async (data: FeedbackFormData) => {
+    try {
+      const avgScore =
+        (data.performanceRating +
+          data.attendanceRating +
+          data.professionalismRating +
+          data.technicalSkillsRating +
+          data.communicationRating) /
+        5;
 
-    toast({
-      title: editingFeedback ? "Feedback Updated" : "Feedback Submitted",
-      description: `Feedback ${editingFeedback ? 'updated' : 'submitted'} successfully. Overall score: ${avgScore.toFixed(1)}/10`,
-    });
-    
-    setIsDialogOpen(false);
-    setEditingFeedback(null);
-    form.reset();
+      await submitCompanyFeedback({
+        studentId: data.studentId,
+        performanceRating: data.performanceRating,
+        attendanceRating: data.attendanceRating,
+        professionalismRating: data.professionalismRating,
+        technicalSkillsRating: data.technicalSkillsRating,
+        communicationRating: data.communicationRating,
+        remarks: data.remarks || '',
+        recommendation: data.recommendation,
+      });
+
+      await loadData();
+
+      toast({
+        title: editingFeedback ? 'Feedback Updated' : 'Feedback Submitted',
+        description: `Overall score: ${avgScore.toFixed(1)}/10`,
+      });
+
+      setIsDialogOpen(false);
+      setEditingFeedback(null);
+      form.reset();
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: editingFeedback ? 'Update failed' : 'Submission failed',
+        description: err instanceof Error ? err.message.slice(0, 200) : 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const ScoreSlider = ({ name, label }: { name: keyof FeedbackFormData; label: string }) => (
@@ -259,8 +360,17 @@ export default function CompanyFeedback() {
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit">
-                    {editingFeedback ? "Update Feedback" : "Submit Feedback"}
+                  <Button type="submit" disabled={form.formState.isSubmitting}>
+                    {form.formState.isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving…
+                      </>
+                    ) : editingFeedback ? (
+                      'Update Feedback'
+                    ) : (
+                      'Submit Feedback'
+                    )}
                   </Button>
                 </div>
               </form>
@@ -276,19 +386,32 @@ export default function CompanyFeedback() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Overall Score</TableHead>
-                  <TableHead>Recommendation</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockFeedback.map((feedback) => (
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="ml-2">Loading…</span>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Overall Score</TableHead>
+                    <TableHead>Recommendation</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {feedbackList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        No feedback submitted yet. Feedback is optional.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    feedbackList.map((feedback) => (
                   <TableRow key={feedback.id}>
                     <TableCell className="font-medium">{feedback.studentName}</TableCell>
                     <TableCell>
@@ -318,9 +441,11 @@ export default function CompanyFeedback() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

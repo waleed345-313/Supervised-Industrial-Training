@@ -3,12 +3,94 @@ import { StatCard } from '@/components/shared/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { mockCompanies, mockUsers } from '@/data/mockData';
-import { Building2, UserCheck, Bell, MessageSquare, Plus } from 'lucide-react';
+import { Building2, UserCheck, Bell, MessageSquare, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import {
+  getCompanies,
+  getUsers,
+  getFocalAnnouncements,
+  getSupervisorAllStudents,
+} from '@/lib/api';
+import { Company, Student, User } from '@/types';
+
+type FocalAnnouncement = {
+  id?: string;
+  _id?: string;
+  title?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  status?: string;
+  priority?: string;
+};
 
 export function UniversityFocalDashboard() {
-  const academicSupervisors = mockUsers.filter(u => u.role === 'academic_supervisor');
+  const { toast } = useToast();
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [announcements, setAnnouncements] = useState<FocalAnnouncement[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [companiesData, usersData, announcementsData, studentsData] = await Promise.all([
+        getCompanies(),
+        getUsers(),
+        getFocalAnnouncements(),
+        getSupervisorAllStudents(),
+      ]);
+
+      setCompanies(Array.isArray(companiesData) ? companiesData : []);
+      setUsers(Array.isArray(usersData) ? usersData : []);
+      setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
+      setStudents(Array.isArray(studentsData) ? studentsData : []);
+    } catch (error) {
+      console.error('Failed to load focal dashboard data:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load dashboard data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const academicSupervisors = useMemo(
+    () => users.filter((u) => u.role === 'academic_supervisor'),
+    [users]
+  );
+
+  const activeAnnouncements = useMemo(
+    () => announcements.filter((a) => String(a.status || 'active').toLowerCase() === 'active'),
+    [announcements]
+  );
+
+  const unassignedCompanies = useMemo(
+    () =>
+      companies.filter((company: Company & { assignedSupervisor?: { id?: string } | string; supervisorId?: string }) => {
+        const supId =
+          company.supervisorId ||
+          (typeof company.assignedSupervisor === 'object' && company.assignedSupervisor !== null
+            ? company.assignedSupervisor.id
+            : typeof company.assignedSupervisor === 'string'
+              ? company.assignedSupervisor
+              : '');
+        return !supId;
+      }),
+    [companies]
+  );
+
+  const allocatedStudents = useMemo(
+    () => students.filter((s) => s.currentStatus === 'allocated' || s.currentStatus === 'shortlisted'),
+    [students]
+  );
 
   return (
     <div className="space-y-8">
@@ -21,26 +103,26 @@ export function UniversityFocalDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Registered Companies"
-          value={mockCompanies.length}
+          value={loading ? 0 : companies.length}
           description="Total partnerships"
           icon={<Building2 className="h-5 w-5" />}
         />
         <StatCard
           title="Academic Supervisors"
-          value={academicSupervisors.length}
+          value={loading ? 0 : academicSupervisors.length}
           description="Available for assignment"
           icon={<UserCheck className="h-5 w-5" />}
         />
         <StatCard
           title="Active Announcements"
-          value={3}
+          value={loading ? 0 : activeAnnouncements.length}
           description="Current notices"
           icon={<Bell className="h-5 w-5" />}
         />
         <StatCard
           title="Open Issues"
-          value={2}
-          description="Requires attention"
+          value={loading ? 0 : unassignedCompanies.length}
+          description="Unassigned companies"
           icon={<MessageSquare className="h-5 w-5" />}
         />
       </div>
@@ -54,28 +136,40 @@ export function UniversityFocalDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Assigned Supervisor</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockCompanies.map((company, index) => (
-                <TableRow key={company.id}>
-                  <TableCell className="font-medium">{company.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{company.industry}</TableCell>
-                  <TableCell className="text-muted-foreground">{company.location}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {index < academicSupervisors.length ? academicSupervisors[index % academicSupervisors.length]?.name : 'Not Assigned'}
-                  </TableCell>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading companies...</span>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Industry</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Assigned Supervisor</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {companies.map((company: Company & { assignedSupervisor?: { name?: string; id?: string } | string; supervisorName?: string; supervisorId?: string }) => {
+                  const assignedName =
+                    company.supervisorName ||
+                    (typeof company.assignedSupervisor === 'object' && company.assignedSupervisor !== null
+                      ? company.assignedSupervisor.name
+                      : '');
+                  return (
+                    <TableRow key={company.id}>
+                      <TableCell className="font-medium">{company.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{company.industry}</TableCell>
+                      <TableCell className="text-muted-foreground">{company.location}</TableCell>
+                      <TableCell className="text-muted-foreground">{assignedName || 'Not Assigned'}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -88,21 +182,48 @@ export function UniversityFocalDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {[
-              { title: 'New Company Partnership', date: '2024-02-15', type: 'info' },
-              { title: 'Deadline Extended for Applications', date: '2024-02-10', type: 'warning' },
-              { title: 'Orientation Session Scheduled', date: '2024-02-05', type: 'info' },
-            ].map((announcement, index) => (
-              <div key={index} className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <p className="font-medium">{announcement.title}</p>
-                  <p className="text-sm text-muted-foreground">{announcement.date}</p>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading announcements...</span>
+            </div>
+          ) : activeAnnouncements.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No announcements found.</p>
+          ) : (
+            <div className="space-y-4">
+              {activeAnnouncements.slice(0, 5).map((announcement) => (
+                <div key={announcement.id || announcement._id} className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">{announcement.title || 'Untitled announcement'}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {String(announcement.createdAt || announcement.updatedAt || '').slice(0, 10)}
+                    </p>
+                  </div>
+                  <Badge variant="outline">{announcement.priority || 'normal'}</Badge>
                 </div>
-                <Badge variant="outline">{announcement.type}</Badge>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5" />
+            Student Allocation Snapshot
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {allocatedStudents.length} student(s) currently shortlisted or allocated across supervised companies.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

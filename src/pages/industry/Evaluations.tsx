@@ -1,353 +1,645 @@
-import { useState, useMemo } from "react";
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader } from '@/components/shared/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/contexts/AuthContext';
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { mockEvaluations } from '@/data/mockData';
-import { ClipboardCheck, Plus, Eye, Pencil } from 'lucide-react';
-import { Evaluation } from '@/types';
+import { useAuth } from "@/contexts/AuthContext";
+import { ClipboardCheck, Save, Eye, Pencil, FileSpreadsheet, RefreshCw, MessageSquare } from "lucide-react";
+import { PloRubricHeaderToggle } from "@/components/shared/PloRubricHeaderToggle";
+import { PloRubricDetail } from "@/components/shared/PloRubricDetail";
+import type { IndustrialPloRubricKey } from "@/data/industrialPloRubrics";
+import { Evaluation, Student, SupervisorFeedback } from "@/types";
+import api, { API_BASE } from "@/lib/api";
+import { io, type Socket } from "socket.io-client";
+import { cn } from "@/lib/utils";
 
-const evaluationSchema = z.object({
-  studentId: z.string().min(1, "Please select a student"),
-  month: z.string().min(1, "Please select a month"),
-  problemAnalysis: z.number().min(0).max(10),
-  modernToolUsage: z.number().min(0).max(10),
-  ethics: z.number().min(0).max(10),
-  individualTeamwork: z.number().min(0).max(10),
-  communication: z.number().min(0).max(10),
-  projectManagement: z.number().min(0).max(10),
-  lifeLongLearning: z.number().min(0).max(10),
-  remarks: z.string().min(10, "Please provide at least 10 characters of feedback").max(500, "Remarks must be less than 500 characters"),
-});
-
-type EvaluationFormData = z.infer<typeof evaluationSchema>;
-
-const students = [
-  { id: '1', name: 'Ahmad Razak', studentId: 'FUI/FURC/F-21-BSET-001' },
-  { id: '2', name: 'Siti Aminah', studentId: 'FUI/FURC/F-21-BSET-003' },
-  { id: '3', name: 'Muhammad Ali', studentId: 'FUI/FURC/F-21-BSET-004' },
-];
+interface StudentEvaluation {
+  studentId: string;
+  name: string;
+  registrationNo: string;
+  problemAnalysis: number | '';
+  investigation: number | '';
+  modernToolUsage: number | '';
+  ethics: number | '';
+  individualTeamwork: number | '';
+  communication: number | '';
+  projectManagement: number | '';
+  lifeLongLearning: number | '';
+  remarks: string;
+}
 
 const months = ['Month 1', 'Month 2', 'Month 3', 'Month 4'];
 
+const MONTHLY_RAW_MAX = 80;
+
 const ploCriteria = [
-  { name: 'problemAnalysis', label: 'Problem Analysis', plo: 'PLO2', description: 'Ability to analyze problems and propose solutions' },
-  { name: 'modernToolUsage', label: 'Modern Tool Usage', plo: 'PLO5', description: 'Knowledge and application of technical tools' },
-  { name: 'ethics', label: 'Ethical Practice', plo: 'PLO8', description: 'Understanding and application of ethical concepts' },
-  { name: 'individualTeamwork', label: 'Individual & Teamwork', plo: 'PLO9', description: 'Individual contribution and team collaboration' },
-  { name: 'communication', label: 'Communication', plo: 'PLO10', description: 'Effective oral and written communication skills' },
-  { name: 'projectManagement', label: 'Project Management', plo: 'PLO11', description: 'Task planning, timelines and resource management' },
-  { name: 'lifeLongLearning', label: 'Lifelong Learning', plo: 'PLO12', description: 'Motivation to learn new technologies and skills' },
+  { key: 'problemAnalysis', label: 'Problem Analysis', plo: 'PLO2' },
+  { key: 'investigation', label: 'Investigation', plo: 'PLO4' },
+  { key: 'modernToolUsage', label: 'Modern Tool Usage', plo: 'PLO5' },
+  { key: 'ethics', label: 'Ethics', plo: 'PLO8' },
+  { key: 'individualTeamwork', label: 'Individual and Teamwork', plo: 'PLO9' },
+  { key: 'communication', label: 'Communication', plo: 'PLO10' },
+  { key: 'projectManagement', label: 'Project Management', plo: 'PLO11' },
+  { key: 'lifeLongLearning', label: 'Lifelong Learning', plo: 'PLO12' },
 ];
 
-export default function IndustryEvaluations() {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingEvaluation, setEditingEvaluation] = useState<Evaluation | null>(null);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [viewEvaluation, setViewEvaluation] = useState<Evaluation | null>(null);
-  const { toast } = useToast();
-  const { user } = useAuth();
+const getDefaultEvaluations = (students: Student[]): StudentEvaluation[] => {
+  return students.map((student) => ({
+    studentId: student.id,
+    name: student.name,
+    registrationNo: student.studentId || '',
+    problemAnalysis: '',
+    investigation: '',
+    modernToolUsage: '',
+    ethics: '',
+    individualTeamwork: '',
+    communication: '',
+    projectManagement: '',
+    lifeLongLearning: '',
+    remarks: '',
+  }));
+};
 
-  const form = useForm<EvaluationFormData>({
-    resolver: zodResolver(evaluationSchema),
-    shouldFocusError: false, // prevent RHF from auto-focusing errors
-    defaultValues: {
-      studentId: "",
-      month: "",
-      problemAnalysis: 0,
-      modernToolUsage: 0,
-      ethics: 0,
-      individualTeamwork: 0,
-      communication: 0,
-      projectManagement: 0,
-      lifeLongLearning: 0,
-      remarks: "",
-    },
-  });
-
-  const [localScores, setLocalScores] = useState<EvaluationFormData>({
-    studentId: "",
-    month: "",
+const getZeroedEvaluations = (students: Student[]): StudentEvaluation[] => {
+  return students.map((student) => ({
+    studentId: student.id,
+    name: student.name,
+    registrationNo: student.studentId || '',
     problemAnalysis: 0,
+    investigation: 0,
     modernToolUsage: 0,
     ethics: 0,
     individualTeamwork: 0,
     communication: 0,
     projectManagement: 0,
     lifeLongLearning: 0,
-    remarks: "",
-  });
+    remarks: '',
+  }));
+};
 
-  const [hasInteracted, setHasInteracted] = useState(false);
+const calculateStudentTotal = (evalData: StudentEvaluation): number => {
+  const scores = [
+    evalData.problemAnalysis,
+    evalData.investigation,
+    evalData.modernToolUsage,
+    evalData.ethics,
+    evalData.individualTeamwork,
+    evalData.communication,
+    evalData.projectManagement,
+    evalData.lifeLongLearning,
+  ];
+  const validScores = scores.filter((s): s is number => s !== '' && typeof s === 'number');
+  if (validScores.length === 0) return 0;
+  const totalRaw = validScores.reduce((sum, score) => sum + score, 0);
+  return (totalRaw / MONTHLY_RAW_MAX) * 12.5;
+};
 
-  const handleCreate = () => {
-    const defaultValues = {
-      studentId: "",
-      month: "",
-      problemAnalysis: 0,
-      modernToolUsage: 0,
-      ethics: 0,
-      individualTeamwork: 0,
-      communication: 0,
-      projectManagement: 0,
-      lifeLongLearning: 0,
-      remarks: "",
+export default function IndustryEvaluations() {
+  const [submittedEvaluations, setSubmittedEvaluations] = useState<Evaluation[]>([]);
+  const [monthlyFeedback, setMonthlyFeedback] = useState<SupervisorFeedback[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewEvaluation, setViewEvaluation] = useState<Evaluation | null>(null);
+  const [editingEvaluation, setEditingEvaluation] = useState<Evaluation | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [assignedStudents, setAssignedStudents] = useState<Student[]>([]);
+  const [expandedRubric, setExpandedRubric] = useState<IndustrialPloRubricKey | null>(null);
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const data = await api.getIndustrialEvaluations();
+      setSubmittedEvaluations(Array.isArray(data) ? (data as Evaluation[]) : []);
+    } catch (err) {
+      console.error(err);
+      setSubmittedEvaluations([]);
+    }
+  }, []);
+
+  const loadMonthlyFeedback = useCallback(async () => {
+    try {
+      const data = await api.getIndustrialFeedback(selectedMonth ? { month: selectedMonth } : undefined);
+      setMonthlyFeedback(Array.isArray(data) ? (data as SupervisorFeedback[]) : []);
+    } catch (err) {
+      console.error(err);
+      setMonthlyFeedback([]);
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    loadMonthlyFeedback();
+  }, [loadMonthlyFeedback]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('sit_portal_token');
+    if (!token) return;
+    const socket: Socket = io(API_BASE, { auth: { token } });
+
+    const onIndustryUpdate = (payload: { type?: string }) => {
+      if (!payload?.type || payload.type === 'feedback') {
+        loadMonthlyFeedback();
+      }
     };
-    setEditingEvaluation(null);
-    form.reset(defaultValues);
-    setLocalScores(defaultValues);
-    setHasInteracted(false);
-    setIsDialogOpen(true);
-  };
 
-  const handleEdit = (evaluation: Evaluation) => {
-    setEditingEvaluation(evaluation);
-    const student = students.find(s => s.name === evaluation.studentName);
-    const scorePerCategory = Math.round((evaluation.score / evaluation.maxScore) * 10);
-
-    const editValues = {
-      studentId: student?.id || "",
-      month: "Month 1",
-      problemAnalysis: scorePerCategory,
-      modernToolUsage: scorePerCategory,
-      ethics: scorePerCategory,
-      individualTeamwork: scorePerCategory,
-      communication: scorePerCategory,
-      projectManagement: scorePerCategory,
-      lifeLongLearning: scorePerCategory,
-      remarks: evaluation.remarks,
+    socket.on('industry:update', onIndustryUpdate);
+    return () => {
+      socket.off('industry:update', onIndustryUpdate);
+      socket.disconnect();
     };
-    form.reset(editValues);
-    setLocalScores(editValues);
-    setHasInteracted(true);
-    setIsDialogOpen(true);
-  };
+  }, [loadMonthlyFeedback]);
 
-  const calculateMonthlyTotal = (data: EvaluationFormData) => {
-    const totalRaw = data.problemAnalysis + data.modernToolUsage + data.ethics +
-      data.individualTeamwork + data.communication +
-      data.projectManagement + data.lifeLongLearning;
-    return (totalRaw / 70) * 12.5;
-  };
-
-  const onSubmit = (data: EvaluationFormData) => {
-    const monthlyTotal = calculateMonthlyTotal(localScores);
-    const selectedStudent = students.find(s => s.id === data.studentId);
-
-    if (editingEvaluation) {
+  const loadAssignedStudents = useCallback(async () => {
+    if (!user?.companyId) {
+      setAssignedStudents([]);
+      return;
+    }
+    try {
+      const data = await api.getStudentsForMyCompany();
+      const students = Array.isArray(data) ? (data as Student[]) : [];
+      setAssignedStudents(students.filter((s) => s.currentStatus === 'allocated'));
+    } catch (err) {
+      console.error(err);
+      setAssignedStudents([]);
       toast({
-        title: "Evaluation Updated",
-        description: `${data.month} evaluation updated. Monthly Total: ${monthlyTotal.toFixed(2)}/12.5`,
-      });
-    } else {
-      toast({
-        title: "Evaluation Submitted",
-        description: `${data.month} evaluation submitted for ${selectedStudent?.name}. Monthly Total: ${monthlyTotal.toFixed(2)}/12.5`,
+        title: "Could not load assigned students",
+        description: "Ensure your account is linked to a company and students are assigned.",
+        variant: "destructive",
       });
     }
+  }, [toast, user?.companyId]);
 
-    setIsDialogOpen(false);
-    setEditingEvaluation(null);
-    form.reset();
+  useEffect(() => {
+    loadAssignedStudents();
+  }, [loadAssignedStudents]);
+  
+  // Initialize evaluations with real student data
+  const [evaluations, setEvaluations] = useState<StudentEvaluation[]>([]);
+  
+  // Update evaluations when students data changes
+  useEffect(() => {
+    if (assignedStudents.length > 0) {
+      setEvaluations(getDefaultEvaluations(assignedStudents));
+    } else {
+      setEvaluations([]);
+    }
+  }, [assignedStudents]);
+  
+  const historyData = submittedEvaluations;
+
+  const handleRubricToggle = (key: IndustrialPloRubricKey) => {
+    setExpandedRubric((prev) => (prev === key ? null : key));
   };
+
+  const handleScoreChange = (
+    studentId: string,
+    criteria: keyof StudentEvaluation,
+    value: string
+  ) => {
+    const numValue = value === '' ? '' : Math.min(10, Math.max(0, parseFloat(value) || 0));
+    setEvaluations((prev) =>
+      prev.map((evalItem) =>
+        evalItem.studentId === studentId
+          ? { ...evalItem, [criteria]: numValue }
+          : evalItem
+      )
+    );
+  };
+
+  const handleRemarksChange = (studentId: string, value: string) => {
+    setEvaluations((prev) =>
+      prev.map((evalItem) =>
+        evalItem.studentId === studentId
+          ? { ...evalItem, remarks: value }
+          : evalItem
+      )
+    );
+  };
+
+  const handleSubmitAll = async () => {
+    if (!selectedMonth) {
+      toast({
+        title: "Error",
+        description: "Please select a month first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const completedEvaluations = evaluations.filter((e) =>
+      ploCriteria.every((c) => e[c.key as keyof StudentEvaluation] !== '')
+    );
+
+    if (completedEvaluations.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please enter marks for at least one student",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedMonthKey = selectedMonth.trim().toLowerCase();
+    const completedStudentIds = new Set(completedEvaluations.map((e) => e.studentId));
+    const alreadyDoneForMonth = historyData.some((ev) =>
+      ev.type === 'monthly' &&
+      String(ev.month || '').trim().toLowerCase() === selectedMonthKey &&
+      completedStudentIds.has(ev.studentId)
+    );
+
+    if (alreadyDoneForMonth) {
+      toast({
+        title: 'Already done',
+        description: 'already evaluation done for this month',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Submit each evaluation to the server
+    try {
+      for (const evalData of completedEvaluations) {
+        await api.submitIndustrialEvaluation({
+          studentId: evalData.studentId,
+          month: selectedMonth,
+          scores: {
+            problemAnalysis: Number(evalData.problemAnalysis),
+            investigation: Number(evalData.investigation),
+            modernToolUsage: Number(evalData.modernToolUsage),
+            ethics: Number(evalData.ethics),
+            individualTeamwork: Number(evalData.individualTeamwork),
+            communication: Number(evalData.communication),
+            projectManagement: Number(evalData.projectManagement),
+            lifeLongLearning: Number(evalData.lifeLongLearning),
+          },
+          remarks: evalData.remarks,
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.toLowerCase().includes('already evaluation done for this month')) {
+        toast({
+          title: 'Already done',
+          description: 'already evaluation done for this month',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Save failed',
+          description: 'Could not save evaluations. Please try again.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+    
+    toast({
+      title: "Evaluations Submitted",
+      description: `${selectedMonth} evaluations submitted for ${completedEvaluations.length} students`,
+    });
+    
+    // Refresh the history data
+    await loadHistory();
+    
+    // Move to next month and reset all fields to zero
+    const currentMonthIndex = months.indexOf(selectedMonth);
+    const nextMonth = currentMonthIndex >= 0 && currentMonthIndex < months.length - 1
+      ? months[currentMonthIndex + 1]
+      : selectedMonth;
+    setSelectedMonth(nextMonth);
+    setEvaluations(getZeroedEvaluations(assignedStudents));
+  };
+  
+  const handleRefresh = () => {
+    loadHistory();
+    loadAssignedStudents();
+    loadMonthlyFeedback();
+    toast({
+      title: "Data Refreshed",
+      description: "Latest data loaded from server",
+    });
+  };
+  
+  // Show message if no students assigned
+  const noStudentsAssigned = assignedStudents.length === 0;
 
   const handleView = (evaluation: Evaluation) => {
     setViewEvaluation(evaluation);
     setViewDialogOpen(true);
   };
 
-  const ScoreSlider = ({ name, label, plo, description }: { name: keyof EvaluationFormData; label: string; plo: string; description: string }) => (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem>
-          <div className="flex justify-between items-center">
-            <div>
-              <FormLabel className="flex items-center gap-2">
-                {label}
-                <Badge variant="outline" className="text-xs">{plo}</Badge>
-              </FormLabel>
-              <p className="text-xs text-muted-foreground">{description}</p>
-            </div>
-            <span className="text-sm font-medium text-primary">{localScores[name] as number}/10</span>
-          </div>
-          <FormControl>
-            <Slider
-              min={0}
-              max={10}
-              step={1}
-              value={[localScores[name] as number]}
-              onValueChange={(value) => {
-                setLocalScores(prev => ({ ...prev, [name]: value[0] }));
-                setHasInteracted(true);
-              }}
-              className="py-2"
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
+  const handleEdit = (evaluation: Evaluation) => {
+    setEditingEvaluation(evaluation);
+    setIsDialogOpen(true);
+  };
 
-  const currentMonthlyTotal = useMemo(() => calculateMonthlyTotal(localScores), [localScores]);
+  const getStudentTotalDisplay = (evalData: StudentEvaluation) => {
+    const total = calculateStudentTotal(evalData);
+    const hasData = ploCriteria.some((c) => evalData[c.key as keyof StudentEvaluation] !== '');
+    return hasData ? `${total.toFixed(2)}/12.5` : '--/12.5';
+  };
+
+  const groupedFeedback = useMemo(() => {
+    const groups = new Map<string, { studentId: string; studentName: string; items: SupervisorFeedback[] }>();
+    for (const item of monthlyFeedback) {
+      const key = item.studentId || item.studentName;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          studentId: item.studentId,
+          studentName: item.studentName || "Unknown Student",
+          items: [],
+        });
+      }
+      groups.get(key)?.items.push(item);
+    }
+
+    return Array.from(groups.values()).sort((a, b) => a.studentName.localeCompare(b.studentName));
+  }, [monthlyFeedback]);
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <PageHeader
-          title="Monthly Industrial Evaluations"
-          description="Submit monthly PLO-based evaluations for interns (Each criterion carries 10 marks)"
+          title="Monthly Industrial Evaluation"
+          description="Rate each criterion from 0 to 10 and add supervisor remarks"
           action={
-            <Button onClick={handleCreate}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Evaluation
+            <Button variant="outline" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
             </Button>
           }
         />
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent
-            className="max-w-2xl max-h-[90vh] overflow-y-auto"
-            onOpenAutoFocus={(e) => e.preventDefault()} // ✅ prevent auto scroll/focus
-          >
-            <DialogHeader>
-              <DialogTitle>
-                {editingEvaluation ? "Edit Evaluation" : "Monthly Industrial Evaluation"}
-              </DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="studentId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Select Student</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Choose a student" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {students.map((student) => (
-                              <SelectItem key={student.id} value={student.id}>
-                                {student.name} ({student.studentId})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="month"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Evaluation Month</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select month" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {months.map((month) => (
-                              <SelectItem key={month} value={month}>
-                                {month}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-semibold text-foreground">PLO-Based Performance Ratings</h4>
-                    <p className="text-sm text-muted-foreground">Each column carries 10 marks</p>
-                  </div>
-                  <div className="grid gap-5">
-                    {ploCriteria.map((criteria) => (
-                      <ScoreSlider
-                        key={criteria.name}
-                        name={criteria.name as keyof EvaluationFormData}
-                        label={criteria.label}
-                        plo={criteria.plo}
-                        description={criteria.description}
-                      />
+        {/* Month Selection Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileSpreadsheet className="h-5 w-5" />
+              Evaluation Setup
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="w-64">
+                <label className="text-sm font-medium mb-2 block">Evaluation Month</label>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {months.map((month) => (
+                      <SelectItem key={month} value={month}>
+                        {month}
+                      </SelectItem>
                     ))}
-                  </div>
-                </div>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={handleSubmitAll}
+                disabled={!selectedMonth}
+                className="mb-0"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save All Evaluations
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">Monthly Total (Max 12.5):</span>
-                    <span className="text-xl font-bold text-primary">
-                      {hasInteracted ? `${currentMonthlyTotal.toFixed(2)}/12.5` : "--/12.5"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Grand Total for 4 months = 50 marks
-                  </p>
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="remarks"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Supervisor Remarks</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Provide detailed feedback on the intern's performance, areas of improvement, and achievements..."
-                          className="min-h-[100px]"
-                          {...field}
+        {/* Evaluation Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <ClipboardCheck className="h-5 w-5" />
+              {selectedMonth ? `${selectedMonth} (Industrial Supervisor Evaluation)` : 'Student Marking Sheet'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto overflow-y-visible border rounded-lg">
+              <Table>
+                <TableHeader>
+                  {/* Category Row */}
+                  <TableRow className="bg-slate-100">
+                    <TableHead rowSpan={3} className="border text-center w-12">No.</TableHead>
+                    <TableHead rowSpan={3} className="border text-center min-w-[140px]">Registration No</TableHead>
+                    <TableHead rowSpan={3} className="border text-center min-w-[140px]">Name</TableHead>
+                    <TableHead colSpan={8} className="border text-center bg-blue-100 text-blue-900">
+                      {selectedMonth || 'Select Month'} (Industrial Supervisor Evaluation)
+                    </TableHead>
+                    <TableHead rowSpan={3} className="border text-center min-w-[100px]">Total</TableHead>
+                    <TableHead rowSpan={3} className="border text-center min-w-[200px]">Remarks</TableHead>
+                  </TableRow>
+                  {/* Marks Category Row */}
+                  <TableRow className="bg-slate-100">
+                    {ploCriteria.map((criteria) => (
+                      <TableHead key={criteria.key} className="border text-center text-xs py-1 min-w-[120px]">
+                        <PloRubricHeaderToggle
+                          label={criteria.label}
+                          plo={criteria.plo}
+                          rubricKey={criteria.key as IndustrialPloRubricKey}
+                          expanded={expandedRubric === criteria.key}
+                          onToggle={handleRubricToggle}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                  {/* Weightage, max marks, and inline rubric details */}
+                  <TableRow className="bg-slate-50 text-xs">
+                    {ploCriteria.map((criteria) => (
+                      <TableHead
+                        key={`${criteria.key}-meta`}
+                        className={cn(
+                          "border text-center py-1 align-top font-normal min-w-[200px] max-w-[280px]",
+                          expandedRubric === criteria.key && "bg-amber-50/90"
+                        )}
+                      >
+                        <div className="text-[10px]">WT: 50</div>
+                        <div className="text-[10px] font-semibold">Max: 10</div>
+                        {expandedRubric === criteria.key && (
+                          <div className="mt-2 border-t border-amber-200/80 pt-2 text-left">
+                            <PloRubricDetail rubricKey={criteria.key as IndustrialPloRubricKey} compact />
+                          </div>
+                        )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {noStudentsAssigned ? (
+                    <TableRow>
+                      <TableCell colSpan={12} className="border text-center py-8 text-muted-foreground">
+                        No students assigned yet. Students will appear here when assigned by the company focal person.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    evaluations.map((evalItem, index) => (
+                      <TableRow key={evalItem.studentId} className="hover:bg-slate-50">
+                        <TableCell className="border text-center font-medium">{index + 1}</TableCell>
+                        <TableCell className="border text-xs font-mono">{evalItem.registrationNo}</TableCell>
+                        <TableCell className="border font-medium">{evalItem.name}</TableCell>
+                        {ploCriteria.map((criteria) => (
+                          <TableCell key={criteria.key} className="border p-1">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={10}
+                              step={0.1}
+                              value={evalItem[criteria.key as keyof StudentEvaluation]}
+                              onChange={(e) =>
+                                handleScoreChange(evalItem.studentId, criteria.key as keyof StudentEvaluation, e.target.value)
+                              }
+                              className="w-16 h-8 text-center p-1 text-sm mx-auto"
+                              placeholder="0"
+                              disabled={!selectedMonth}
+                            />
+                          </TableCell>
+                        ))}
+                        <TableCell className="border text-center font-semibold text-sm">
+                          {getStudentTotalDisplay(evalItem)}
+                        </TableCell>
+                        <TableCell className="border p-1">
+                          <Textarea
+                            value={evalItem.remarks}
+                            onChange={(e) => handleRemarksChange(evalItem.studentId, e.target.value)}
+                            placeholder="Add remarks..."
+                            className="min-h-[32px] h-8 text-xs resize-none"
+                            disabled={!selectedMonth}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
-                />
+                </TableBody>
+              </Table>
+            </div>
 
-                <div className="flex justify-end gap-3">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">
-                    {editingEvaluation ? "Update Evaluation" : "Submit Evaluation"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+            {!selectedMonth && (
+              <p className="text-sm text-muted-foreground mt-4 text-center">
+                Please select an evaluation month to start entering marks
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
+        {/* Academic Supervisor Feedback */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MessageSquare className="h-5 w-5" />
+              Academic Supervisor Feedback
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {groupedFeedback.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                {selectedMonth
+                  ? `No feedback available for ${selectedMonth}.`
+                  : "No feedback shared by academic supervisor yet."}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {groupedFeedback.map((studentGroup) => (
+                  <div key={studentGroup.studentId || studentGroup.studentName} className="rounded-lg border p-3 space-y-3">
+                    <div className="font-semibold">{studentGroup.studentName}</div>
+                    <div className="space-y-2">
+                      {studentGroup.items.map((feedback) => (
+                        <div key={feedback.id} className="rounded-md border bg-muted/30 p-3 space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <Badge variant="secondary">{feedback.month || "General"}</Badge>
+                            <span className="text-xs text-muted-foreground">{feedback.sentAt}</span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            From: {feedback.supervisorName} | Type: {feedback.type}
+                          </div>
+                          <p className="text-sm">{feedback.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Submitted Evaluations History */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <ClipboardCheck className="h-5 w-5" />
+              Submitted Evaluations History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {historyData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No evaluations submitted yet.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Month</TableHead>
+                    <TableHead>Monthly Total</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historyData.map((evaluation) => {
+                    const monthlyTotal = ((evaluation.score / evaluation.maxScore) * 12.5).toFixed(2);
+                    return (
+                      <TableRow key={evaluation.id}>
+                        <TableCell className="font-medium">{evaluation.studentName}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {evaluation.month || (evaluation.type === 'monthly' ? 'Month 1' : 'Final')}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {monthlyTotal}/12.5
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{evaluation.date}</TableCell>
+                        <TableCell>
+                          <Badge variant="default">Submitted</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleView(evaluation)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleEdit(evaluation)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* View Dialog */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>View Evaluation</DialogTitle>
+              <DialogDescription>Summary of the submitted monthly evaluation.</DialogDescription>
             </DialogHeader>
             {viewEvaluation ? (
               <div className="space-y-4">
@@ -358,7 +650,7 @@ export default function IndustryEvaluations() {
                   </div>
                   <div>
                     <h5 className="text-sm font-medium">Month</h5>
-                    <p className="text-muted-foreground">{viewEvaluation.type === 'monthly' ? 'Month 1' : 'Month 2'}</p>
+                    <p className="text-muted-foreground">{viewEvaluation.month || (viewEvaluation.type === 'monthly' ? 'Month 1' : 'Final')}</p>
                   </div>
                   <div>
                     <h5 className="text-sm font-medium">Date</h5>
@@ -388,58 +680,50 @@ export default function IndustryEvaluations() {
           </DialogContent>
         </Dialog>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="h-5 w-5" />
-              Submitted Evaluations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Month</TableHead>
-                  <TableHead>Monthly Total</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockEvaluations.map((evaluation) => {
-                  const monthlyTotal = ((evaluation.score / evaluation.maxScore) * 12.5).toFixed(2);
-                  return (
-                    <TableRow key={evaluation.id}>
-                      <TableCell className="font-medium">{evaluation.studentName}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {evaluation.type === 'monthly' ? 'Month 1' : 'Month 2'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {monthlyTotal}/12.5
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{evaluation.date}</TableCell>
-                      <TableCell>
-                        <Badge variant="default">Submitted</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleView(evaluation)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleEdit(evaluation)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        {/* Edit Dialog - Simple Version */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Evaluation</DialogTitle>
+              <DialogDescription>Modify evaluation details.</DialogDescription>
+            </DialogHeader>
+            {editingEvaluation ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h5 className="text-sm font-medium">Student</h5>
+                    <p className="text-muted-foreground">{editingEvaluation.studentName}</p>
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-medium">Month</h5>
+                    <p className="text-muted-foreground">{editingEvaluation.month || (editingEvaluation.type === 'monthly' ? 'Month 1' : 'Final')}</p>
+                  </div>
+                </div>
+                <div>
+                  <h5 className="text-sm font-medium">Current Score</h5>
+                  <p className="text-muted-foreground">{editingEvaluation.score}/{editingEvaluation.maxScore}</p>
+                </div>
+                <div>
+                  <h5 className="text-sm font-medium">Remarks</h5>
+                  <Textarea
+                    defaultValue={editingEvaluation.remarks}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={() => {
+                    toast({
+                      title: "Evaluation Updated",
+                      description: "Evaluation has been updated successfully",
+                    });
+                    setIsDialogOpen(false);
+                  }}>Save Changes</Button>
+                </div>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

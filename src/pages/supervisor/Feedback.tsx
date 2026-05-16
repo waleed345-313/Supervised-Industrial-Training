@@ -7,60 +7,135 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockStudents, mockCompanies } from '@/data/mockData';
+import { useRealtimeData, useRealtimeFeedback, useRealtimeSupervisorStudents } from '@/hooks/use-realtime-data';
+import { getSupervisorMonthlyEvaluations, sendFeedback } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { MessageSquare, Send, Eye, User, Calendar, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+
+interface Student {
+  id: string;
+  name: string;
+  email: string;
+  studentId: string;
+  allocatedCompany?: string;
+}
+
+interface FeedbackItem {
+  _id: string;
+  studentUser: string;
+  studentName: string;
+  month?: string;
+  type: string;
+  message: string;
+  status: string;
+  sentAt: string;
+}
+
+interface MonthlyEvaluation {
+  id: string;
+  studentId: string;
+  studentName: string;
+  month: string;
+  marksOutOf12_5: number;
+  remarks: string;
+  date: string;
+}
 
 export default function SupervisorFeedback() {
-  const [selectedStudent, setSelectedStudent] = useState<typeof mockStudents[0] | null>(null);
-  const [selectedFeedback, setSelectedFeedback] = useState<typeof feedbackHistory[0] | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedFeedback, setSelectedFeedback] = useState<FeedbackItem | null>(null);
   const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({
     type: '',
+    month: '',
     message: ''
   });
+  const { toast } = useToast();
 
-  const assignedStudents = mockStudents.filter(s => s.currentStatus === 'allocated');
+  const { data: students = [], loading: studentsLoading } = useRealtimeSupervisorStudents();
+  const { data: feedbackHistory = [], loading: feedbackLoading, refresh } = useRealtimeFeedback();
 
-  const feedbackHistory = [
-    { 
-      id: 1, 
-      student: 'Sarah Johnson', 
-      date: '2024-01-12', 
-      type: 'Monthly Review', 
-      status: 'Sent',
-      message: 'Excellent progress on the assigned tasks. Keep up the good work and continue to demonstrate strong problem-solving skills.'
-    },
-    { 
-      id: 2, 
-      student: 'Michael Chen', 
-      date: '2024-01-10', 
-      type: 'Performance Note', 
-      status: 'Sent',
-      message: 'Good documentation and communication skills. Consider improving time management for better productivity.'
-    },
-    { 
-      id: 3, 
-      student: 'Sarah Johnson', 
-      date: '2024-01-05', 
-      type: 'Progress Update', 
-      status: 'Sent',
-      message: 'Initial onboarding completed successfully. Ready to start working on main project modules.'
-    },
-  ];
+  const { data: monthlyEvals = [] } = useRealtimeData({
+    fetchFn: async () => getSupervisorMonthlyEvaluations(),
+    socketEvent: 'supervisor:update',
+    updateTypes: ['evaluations'],
+    initialData: [],
+    pollingInterval: 30000,
+  });
 
-  const handleSendFeedback = () => {
-    // In a real app, this would send the feedback via API
-    console.log('Sending feedback to:', selectedStudent?.name, feedbackForm);
-    setIsSendDialogOpen(false);
-    setFeedbackForm({ type: '', message: '' });
-    setSelectedStudent(null);
+  const monthlyByStudent = useMemo(() => {
+    const map = new Map<string, MonthlyEvaluation[]>();
+    for (const e of monthlyEvals as MonthlyEvaluation[]) {
+      const sid = String(e.studentId || '');
+      if (!sid) continue;
+      const list = map.get(sid) || [];
+      list.push(e);
+      map.set(sid, list);
+    }
+    for (const [sid, list] of map.entries()) {
+      list.sort((a, b) => String(a.month || '').localeCompare(String(b.month || '')));
+      map.set(sid, list);
+    }
+    return map;
+  }, [monthlyEvals]);
+
+  const handleSendFeedback = async () => {
+    if (!selectedStudent) return;
+    
+    // If no feedback provided, just close (optional feedback)
+    if (!feedbackForm.type && !feedbackForm.message.trim()) {
+      setIsSendDialogOpen(false);
+      setSelectedStudent(null);
+      return;
+    }
+
+    if (!feedbackForm.type || !feedbackForm.message.trim()) {
+      toast({
+        title: 'Missing fields',
+        description: 'Select a feedback type and enter a message (or leave both empty to skip).',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      await sendFeedback({
+        studentId: selectedStudent.id,
+        type: feedbackForm.type,
+        month: feedbackForm.month || undefined,
+        message: feedbackForm.message,
+      });
+      
+      toast({
+        title: "Feedback Sent",
+        description: `Feedback sent to ${selectedStudent.name}.`,
+      });
+      
+      refresh();
+      setIsSendDialogOpen(false);
+      setFeedbackForm({ type: '', month: '', message: '' });
+      setSelectedStudent(null);
+    } catch (err) {
+      console.error('Failed to send feedback:', err);
+      toast({
+        title: "Failed to Send",
+        description: err instanceof Error ? err.message : "Failed to send feedback. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleViewFeedback = (feedback: typeof feedbackHistory[0]) => {
+  const handleViewFeedback = (feedback: FeedbackItem) => {
     setSelectedFeedback(feedback);
     setIsViewDialogOpen(true);
+  };
+  
+  const getLastFeedbackDate = (studentId: string) => {
+    const studentFeedback = feedbackHistory.filter(f => f.studentUser === studentId);
+    if (studentFeedback.length === 0) return 'No feedback yet';
+    return new Date(studentFeedback[0].sentAt).toLocaleDateString();
   };
 
   return (
@@ -89,17 +164,43 @@ export default function SupervisorFeedback() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {assignedStudents.map((student) => {
-                  const company = mockCompanies.find(c => c.name === student.allocatedCompany);
-                  return (
+                {studentsLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>no students assigned yet.</p>
+                    </TableCell>
+                  </TableRow>
+                ) : students.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>no students assigned yet.</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  students.map((student: Student) => {
+                    const evals = monthlyByStudent.get(String(student.id)) || [];
+                    const canSend = evals.length > 0;
+                    return (
                     <TableRow key={student.id}>
                       <TableCell className="font-medium">{student.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{company?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">2024-01-12</TableCell>
+                      <TableCell className="text-muted-foreground">{student.allocatedCompany || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{getLastFeedbackDate(student.id)}</TableCell>
                       <TableCell>
                         <Dialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen}>
                           <DialogTrigger asChild>
-                            <Button size="sm" onClick={() => setSelectedStudent(student)}>
+                            <Button
+                              size="sm"
+                              disabled={!canSend}
+                              onClick={() => {
+                                setSelectedStudent(student);
+                                const months = Array.from(new Set(evals.map(e => String(e.month || '').trim()).filter(Boolean)));
+                                const latest = months.sort((a, b) => a.localeCompare(b)).slice(-1)[0] || '';
+                                setFeedbackForm(prev => ({ ...prev, month: latest }));
+                              }}
+                              title={!canSend ? 'Enabled after industrial supervisor submits monthly marking' : undefined}
+                            >
                               <Send className="h-4 w-4 mr-1" />
                               Send Feedback
                             </Button>
@@ -120,12 +221,35 @@ export default function SupervisorFeedback() {
                                     <span className="font-medium">{selectedStudent.name}</span>
                                   </div>
                                   <div className="text-sm text-muted-foreground">
-                                    Student ID: {selectedStudent.studentId} | Company: {selectedStudent.allocatedCompany}
+                                    Student ID: {selectedStudent.studentId} | Company: {selectedStudent.allocatedCompany || 'N/A'}
                                   </div>
                                 </div>
 
                                 {/* Feedback Form */}
                                 <div className="space-y-4">
+                                  <div>
+                                    <Label htmlFor="feedback-month">Month (optional)</Label>
+                                    <Select
+                                      value={feedbackForm.month}
+                                      onValueChange={(value) => setFeedbackForm(prev => ({ ...prev, month: value }))}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select month (optional)" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {(monthlyByStudent.get(String(selectedStudent.id)) || [])
+                                          .map(e => String(e.month || '').trim())
+                                          .filter(Boolean)
+                                          .filter((v, i, arr) => arr.indexOf(v) === i)
+                                          .sort((a, b) => a.localeCompare(b))
+                                          .map((m) => (
+                                            <SelectItem key={m} value={m}>
+                                              {m}
+                                            </SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                   <div>
                                     <Label htmlFor="feedback-type">Feedback Type</Label>
                                     <Select value={feedbackForm.type} onValueChange={(value) => setFeedbackForm(prev => ({ ...prev, type: value }))}>
@@ -157,18 +281,17 @@ export default function SupervisorFeedback() {
                                 {/* Action Buttons */}
                                 <div className="flex gap-3 pt-4 border-t">
                                   <Button 
-                                    onClick={handleSendFeedback} 
-                                    disabled={!feedbackForm.type || !feedbackForm.message.trim()}
+                                    onClick={handleSendFeedback}
                                     className="flex-1"
                                   >
                                     <Send className="h-4 w-4 mr-2" />
-                                    Send Feedback
+                                    {feedbackForm.type || feedbackForm.message.trim() ? 'Send Feedback' : 'Skip & Continue'}
                                   </Button>
                                   <Button 
                                     variant="outline" 
                                     onClick={() => {
                                       setIsSendDialogOpen(false);
-                                      setFeedbackForm({ type: '', message: '' });
+                                      setFeedbackForm({ type: '', month: '', message: '' });
                                       setSelectedStudent(null);
                                     }}
                                     className="flex-1"
@@ -183,7 +306,8 @@ export default function SupervisorFeedback() {
                       </TableCell>
                     </TableRow>
                   );
-                })}
+                })
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -208,10 +332,17 @@ export default function SupervisorFeedback() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {feedbackHistory.map((feedback) => (
-                  <TableRow key={feedback.id}>
-                    <TableCell className="font-medium">{feedback.student}</TableCell>
-                    <TableCell className="text-muted-foreground">{feedback.date}</TableCell>
+                {feedbackHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <p>No feedback submitted yet.</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  feedbackHistory.map((feedback: FeedbackItem) => (
+                  <TableRow key={feedback._id}>
+                    <TableCell className="font-medium">{feedback.studentName}</TableCell>
+                    <TableCell className="text-muted-foreground">{new Date(feedback.sentAt).toLocaleDateString()}</TableCell>
                     <TableCell className="text-muted-foreground">{feedback.type}</TableCell>
                     <TableCell className="text-muted-foreground">{feedback.status}</TableCell>
                     <TableCell>
@@ -236,14 +367,14 @@ export default function SupervisorFeedback() {
                                   <User className="h-4 w-4 text-muted-foreground" />
                                   <div>
                                     <span className="text-sm font-medium">Student</span>
-                                    <p className="text-sm text-muted-foreground">{selectedFeedback.student}</p>
+                                    <p className="text-sm text-muted-foreground">{selectedFeedback.studentName}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Calendar className="h-4 w-4 text-muted-foreground" />
                                   <div>
                                     <span className="text-sm font-medium">Date</span>
-                                    <p className="text-sm text-muted-foreground">{selectedFeedback.date}</p>
+                                    <p className="text-sm text-muted-foreground">{new Date(selectedFeedback.sentAt).toLocaleDateString()}</p>
                                   </div>
                                 </div>
                                 <div>
@@ -269,7 +400,8 @@ export default function SupervisorFeedback() {
                       </Dialog>
                     </TableCell>
                   </TableRow>
-                ))}
+                ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

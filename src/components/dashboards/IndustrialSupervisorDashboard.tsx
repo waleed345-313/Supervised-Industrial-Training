@@ -8,28 +8,37 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from '@/components/ui/badge';
-import { mockStudents, mockEvaluations } from '@/data/mockData';
-import { GraduationCap, ClipboardCheck, MessageSquare, Calendar, Eye } from 'lucide-react';
-import { useState } from 'react';
+import { GraduationCap, ClipboardCheck, MessageSquare, Calendar, Eye, RefreshCw, ChevronDown } from 'lucide-react';
+import { PloRubricDetail } from '@/components/shared/PloRubricDetail';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import type { IndustrialPloRubricKey } from '@/data/industrialPloRubrics';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Evaluation } from '@/types';
+import { Evaluation, Student } from '@/types';
+import {
+  getIndustrialEvaluations,
+  getMessageThreads,
+  getStudentsForMyCompany,
+  submitIndustrialEvaluation,
+} from '@/lib/api';
 
 // PLO-based evaluation schema matching the Industry Evaluation Sheet
 const evaluationSchema = z.object({
   studentId: z.string().min(1, "Please select a student"),
   month: z.string().min(1, "Please select a month"),
   problemAnalysis: z.number().min(0).max(10),
+  investigation: z.number().min(0).max(10),
   modernToolUsage: z.number().min(0).max(10),
   ethics: z.number().min(0).max(10),
   individualTeamwork: z.number().min(0).max(10),
   communication: z.number().min(0).max(10),
   projectManagement: z.number().min(0).max(10),
   lifeLongLearning: z.number().min(0).max(10),
-  remarks: z.string().min(10, "Please provide at least 10 characters of feedback").max(500, "Remarks must be less than 500 characters"),
+  remarks: z.string().max(500, "Remarks must be less than 500 characters").or(z.literal("")),
 });
 
 type EvaluationFormData = z.infer<typeof evaluationSchema>;
@@ -45,23 +54,66 @@ const months = [
 ];
 
 // PLO criteria with descriptions
-const ploCriteria = [
-  { name: 'problemAnalysis', label: 'Problem Analysis', plo: 'PLO2', description: 'Ability to analyze problems and propose solutions' },
-  { name: 'modernToolUsage', label: 'Modern Tool Usage', plo: 'PLO5', description: 'Knowledge and application of technical tools' },
-  { name: 'ethics', label: 'Ethical Practice', plo: 'PLO8', description: 'Understanding and application of ethical concepts' },
-  { name: 'individualTeamwork', label: 'Individual & Teamwork', plo: 'PLO9', description: 'Individual contribution and team collaboration' },
-  { name: 'communication', label: 'Communication', plo: 'PLO10', description: 'Effective oral and written communication skills' },
-  { name: 'projectManagement', label: 'Project Management', plo: 'PLO11', description: 'Task planning, timelines and resource management' },
-  { name: 'lifeLongLearning', label: 'Lifelong Learning', plo: 'PLO12', description: 'Motivation to learn new technologies and skills' },
+const ploCriteria: {
+  name: keyof EvaluationFormData & string;
+  label: string;
+  plo: string;
+  rubricKey: IndustrialPloRubricKey;
+}[] = [
+  { name: 'problemAnalysis', label: 'Problem Analysis', plo: 'PLO2', rubricKey: 'problemAnalysis' },
+  { name: 'investigation', label: 'Investigation', plo: 'PLO4', rubricKey: 'investigation' },
+  { name: 'modernToolUsage', label: 'Modern Tool Usage', plo: 'PLO5', rubricKey: 'modernToolUsage' },
+  { name: 'ethics', label: 'Ethical Practice', plo: 'PLO8', rubricKey: 'ethics' },
+  { name: 'individualTeamwork', label: 'Individual & Teamwork', plo: 'PLO9', rubricKey: 'individualTeamwork' },
+  { name: 'communication', label: 'Communication', plo: 'PLO10', rubricKey: 'communication' },
+  { name: 'projectManagement', label: 'Project Management', plo: 'PLO11', rubricKey: 'projectManagement' },
+  { name: 'lifeLongLearning', label: 'Lifelong Learning', plo: 'PLO12', rubricKey: 'lifeLongLearning' },
 ];
 
 export function IndustrialSupervisorDashboard() {
-  const assignedStudents = mockStudents.filter(s => s.currentStatus === 'allocated');
+  const [assignedStudents, setAssignedStudents] = useState<Student[]>([]);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [messageThreads, setMessageThreads] = useState<Array<{ unreadCount?: number }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const [isEvaluateDialogOpen, setIsEvaluateDialogOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<typeof mockStudents[0] | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [selectedEvaluation, setSelectedEvaluation] = useState<typeof mockEvaluations[0] | null>(null);
+  const [selectedEvaluation, setSelectedEvaluation] = useState<Evaluation | null>(null);
   const { toast } = useToast();
+
+  const loadDashboardData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [studentsResult, evaluationsResult, messagesResult] = await Promise.all([
+        getStudentsForMyCompany(),
+        getIndustrialEvaluations(),
+        getMessageThreads(),
+      ]);
+
+      setAssignedStudents(Array.isArray(studentsResult) ? (studentsResult as Student[]) : []);
+      setEvaluations(Array.isArray(evaluationsResult) ? (evaluationsResult as Evaluation[]) : []);
+      setMessageThreads(Array.isArray(messagesResult) ? messagesResult : []);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: 'Could not load dashboard data',
+        description: 'Check your session and backend connection, then refresh again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void loadDashboardData();
+  }, [loadDashboardData]);
+
+  const unreadMessages = useMemo(
+    () => messageThreads.reduce((sum, thread) => sum + Number(thread.unreadCount || 0), 0),
+    [messageThreads]
+  );
 
   const form = useForm<EvaluationFormData>({
     resolver: zodResolver(evaluationSchema),
@@ -69,6 +121,7 @@ export function IndustrialSupervisorDashboard() {
       studentId: "",
       month: "",
       problemAnalysis: 7,
+      investigation: 7,
       modernToolUsage: 7,
       ethics: 7,
       individualTeamwork: 7,
@@ -79,13 +132,13 @@ export function IndustrialSupervisorDashboard() {
     },
   });
 
-  const handleEvaluate = (student: typeof mockStudents[0]) => {
+  const handleEvaluate = (student: Student) => {
     setSelectedStudent(student);
-    const studentData = students.find(s => s.name === student.name);
     form.reset({
-      studentId: studentData?.id || "",
+      studentId: student.id,
       month: "",
       problemAnalysis: 7,
+      investigation: 7,
       modernToolUsage: 7,
       ethics: 7,
       individualTeamwork: 7,
@@ -97,35 +150,79 @@ export function IndustrialSupervisorDashboard() {
     setIsEvaluateDialogOpen(true);
   };
 
-  const handleView = (evaluation: typeof mockEvaluations[0]) => {
+  const handleView = (evaluation: Evaluation) => {
     setSelectedEvaluation(evaluation);
     setIsViewDialogOpen(true);
   };
 
-  // Calculate monthly total (each column is 10 marks, 7 columns = 70 marks, converted to 12.5 max)
+  const handleRefresh = () => {
+    void loadDashboardData();
+  };
+
+  const MONTHLY_RAW_MAX = 80;
+
   const calculateMonthlyTotal = (data: EvaluationFormData) => {
-    const totalRaw = data.problemAnalysis + data.modernToolUsage + data.ethics + 
-                     data.individualTeamwork + data.communication + 
-                     data.projectManagement + data.lifeLongLearning;
-    // Convert 70 marks to 12.5 scale (as per sheet)
-    return (totalRaw / 70) * 12.5;
+    const totalRaw =
+      data.problemAnalysis +
+      data.investigation +
+      data.modernToolUsage +
+      data.ethics +
+      data.individualTeamwork +
+      data.communication +
+      data.projectManagement +
+      data.lifeLongLearning;
+    return (totalRaw / MONTHLY_RAW_MAX) * 12.5;
   };
 
-  const onSubmit = (data: EvaluationFormData) => {
-    const monthlyTotal = calculateMonthlyTotal(data);
-    const selectedStudentData = students.find(s => s.id === data.studentId);
-    
-    toast({
-      title: "Evaluation Submitted",
-      description: `${data.month} evaluation submitted for ${selectedStudentData?.name}. Monthly Total: ${monthlyTotal.toFixed(2)}/12.5`,
-    });
-    
-    setIsEvaluateDialogOpen(false);
-    setSelectedStudent(null);
-    form.reset();
+  const onSubmit = async (data: EvaluationFormData) => {
+    try {
+      const submitted = await submitIndustrialEvaluation({
+        studentId: data.studentId,
+        month: data.month,
+        scores: {
+          problemAnalysis: data.problemAnalysis,
+          investigation: data.investigation,
+          modernToolUsage: data.modernToolUsage,
+          ethics: data.ethics,
+          individualTeamwork: data.individualTeamwork,
+          communication: data.communication,
+          projectManagement: data.projectManagement,
+          lifeLongLearning: data.lifeLongLearning,
+        },
+        remarks: data.remarks,
+      });
+
+      const selectedStudentData = assignedStudents.find((student) => student.id === data.studentId);
+      toast({
+        title: 'Evaluation Submitted',
+        description: `${data.month} evaluation submitted for ${selectedStudentData?.name || 'student'}. Monthly Total: ${calculateMonthlyTotal(data).toFixed(2)}/12.5`,
+      });
+
+      setEvaluations((current) => [submitted as Evaluation, ...current]);
+      setIsEvaluateDialogOpen(false);
+      setSelectedStudent(null);
+      form.reset();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not submit evaluation.';
+      toast({
+        title: 'Submission failed',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const ScoreSlider = ({ name, label, plo, description }: { name: keyof EvaluationFormData; label: string; plo: string; description: string }) => (
+  const ScoreSlider = ({
+    name,
+    label,
+    plo,
+    rubricKey,
+  }: {
+    name: keyof EvaluationFormData;
+    label: string;
+    plo: string;
+    rubricKey: IndustrialPloRubricKey;
+  }) => (
     <FormField
       control={form.control}
       name={name}
@@ -137,7 +234,15 @@ export function IndustrialSupervisorDashboard() {
                 {label}
                 <Badge variant="outline" className="text-xs">{plo}</Badge>
               </FormLabel>
-              <p className="text-xs text-muted-foreground">{description}</p>
+              <Collapsible className="mt-1">
+                <CollapsibleTrigger className="flex items-center gap-1 text-xs text-primary hover:underline [&[data-state=open]>svg]:rotate-180">
+                  View rubric details
+                  <ChevronDown className="h-3 w-3 transition-transform" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <PloRubricDetail rubricKey={rubricKey} />
+                </CollapsibleContent>
+              </Collapsible>
             </div>
             <span className="text-sm font-medium text-primary">{field.value as number}/10</span>
           </div>
@@ -166,6 +271,12 @@ export function IndustrialSupervisorDashboard() {
       <PageHeader
         title="Industrial Supervisor Dashboard"
         description="Manage intern evaluations and communication"
+        action={
+          <Button variant="outline" onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        }
       />
 
       {/* Stats Grid */}
@@ -178,20 +289,20 @@ export function IndustrialSupervisorDashboard() {
         />
         <StatCard
           title="Evaluations Submitted"
-          value={mockEvaluations.length}
+          value={evaluations.length}
           description="This cycle"
           icon={<ClipboardCheck className="h-5 w-5" />}
         />
         <StatCard
           title="Pending Evaluations"
-          value={1}
+          value={Math.max(0, assignedStudents.length * 4 - evaluations.length)}
           description="Due this month"
           icon={<Calendar className="h-5 w-5" />}
         />
         <StatCard
           title="Messages"
-          value={3}
-          description="From supervisors"
+          value={unreadMessages}
+          description="Unread messages"
           icon={<MessageSquare className="h-5 w-5" />}
         />
       </div>
@@ -205,32 +316,38 @@ export function IndustrialSupervisorDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Student ID</TableHead>
-                <TableHead>Specialization</TableHead>
-                <TableHead>Start Date</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignedStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell className="font-medium">{student.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{student.studentId}</TableCell>
-                  <TableCell className="text-muted-foreground">{student.specialization}</TableCell>
-                  <TableCell className="text-muted-foreground">2024-02-01</TableCell>
-                  <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => handleEvaluate(student)}>
-                      Evaluate
-                    </Button>
-                  </TableCell>
+          {assignedStudents.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No assigned interns found.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Student ID</TableHead>
+                  <TableHead>Specialization</TableHead>
+                  <TableHead>Supervisor</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {assignedStudents.map((student) => (
+                  <TableRow key={student.id}>
+                    <TableCell className="font-medium">{student.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.studentId}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.specialization}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.industrialSupervisorName || 'Assigned to you'}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleEvaluate(student)}>
+                        Evaluate
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -243,32 +360,38 @@ export function IndustrialSupervisorDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockEvaluations.map((evaluation) => (
-                <TableRow key={evaluation.id}>
-                  <TableCell className="font-medium">{evaluation.studentName}</TableCell>
-                  <TableCell className="text-muted-foreground capitalize">{evaluation.type}</TableCell>
-                  <TableCell className="text-muted-foreground">{evaluation.score}/{evaluation.maxScore}</TableCell>
-                  <TableCell className="text-muted-foreground">{evaluation.date}</TableCell>
-                  <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => handleView(evaluation)}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+          {evaluations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No evaluations submitted yet.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {evaluations.map((evaluation) => (
+                  <TableRow key={evaluation.id}>
+                    <TableCell className="font-medium">{evaluation.studentName}</TableCell>
+                    <TableCell className="text-muted-foreground capitalize">{evaluation.type}</TableCell>
+                    <TableCell className="text-muted-foreground">{evaluation.score}/{evaluation.maxScore}</TableCell>
+                    <TableCell className="text-muted-foreground">{evaluation.date}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleView(evaluation)}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -294,7 +417,7 @@ export function IndustrialSupervisorDashboard() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {students.map((student) => (
+                          {assignedStudents.map((student) => (
                             <SelectItem key={student.id} value={student.id}>
                               {student.name} ({student.studentId})
                             </SelectItem>
@@ -339,12 +462,12 @@ export function IndustrialSupervisorDashboard() {
                 </div>
                 <div className="grid gap-5">
                   {ploCriteria.map((criteria) => (
-                    <ScoreSlider 
+                    <ScoreSlider
                       key={criteria.name}
-                      name={criteria.name as keyof EvaluationFormData} 
+                      name={criteria.name as keyof EvaluationFormData}
                       label={criteria.label}
                       plo={criteria.plo}
-                      description={criteria.description}
+                      rubricKey={criteria.rubricKey}
                     />
                   ))}
                 </div>
@@ -384,7 +507,7 @@ export function IndustrialSupervisorDashboard() {
                 <Button type="button" variant="outline" onClick={() => setIsEvaluateDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">
+                <Button type="submit" disabled={isLoading}>
                   Submit Evaluation
                 </Button>
               </div>

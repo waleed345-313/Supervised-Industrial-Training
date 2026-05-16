@@ -8,23 +8,83 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { mockApplications } from '@/data/mockData';
+import api, { getReplacementEligibilityMe } from '@/lib/api';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { ReplacementStudentCallout } from '@/components/shared/ReplacementStudentCallout';
+import { useSocket } from '@/hooks/use-socket';
 import { Student, Application } from '@/types';
 import { FileText, Eye, Calendar, Building, Briefcase, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
 
 export default function StudentApplications() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const socket = useSocket();
   const student = user as Student;
-  
-  const myApplications = mockApplications.filter(a => a.studentId === student.id);
-  const applicationProgress = (student.applicationCount / student.maxApplications) * 100;
+  const [isLoading, setIsLoading] = useState(true);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [replacementEligible, setReplacementEligible] = useState<boolean | null>(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(true);
+
+  const applicationCount = applications.length;
+  const maxApplications = student?.maxApplications ?? 2;
+  const myApplications = applications;
+  const applicationProgress =
+    maxApplications > 0 ? Math.min(100, (applicationCount / maxApplications) * 100) : 0;
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        setIsLoading(true);
+        const data = await api.getStudentApplications();
+        setApplications(data);
+      } catch (error) {
+        console.error('Error fetching applications:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchApplications();
+  }, []);
+
+  useEffect(() => {
+    const loadEligibility = async () => {
+      try {
+        setEligibilityLoading(true);
+        const r = await getReplacementEligibilityMe();
+        setReplacementEligible(Boolean(r?.eligible));
+      } catch {
+        setReplacementEligible(null);
+      } finally {
+        setEligibilityLoading(false);
+      }
+    };
+    loadEligibility();
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onStudent = (payload: { type?: string }) => {
+      if (payload?.type === 'application') {
+        void api
+          .getStudentApplications()
+          .then(setApplications)
+          .catch(() => {});
+        void getReplacementEligibilityMe()
+          .then((r) => setReplacementEligible(Boolean(r?.eligible)))
+          .catch(() => setReplacementEligible(null));
+      }
+    };
+    socket.on('student:update', onStudent);
+    return () => {
+      socket.off('student:update', onStudent);
+    };
+  }, [socket]);
 
   const handleViewApplication = (application: Application) => {
     setSelectedApplication(application);
@@ -39,6 +99,8 @@ export default function StudentApplications() {
           description="Track and manage your internship applications"
         />
 
+        <ReplacementStudentCallout eligible={replacementEligible} loading={isLoading || eligibilityLoading} />
+
         {/* Application Limit Card */}
         <Card>
           <CardContent className="pt-6">
@@ -46,13 +108,13 @@ export default function StudentApplications() {
               <div>
                 <h3 className="font-medium mb-1">Application Limit</h3>
                 <p className="text-sm text-muted-foreground">
-                  You have used {student.applicationCount} of {student.maxApplications} applications
+                  You have used {applicationCount} of {maxApplications} applications
                 </p>
               </div>
               <div className="w-full sm:w-48">
                 <Progress value={applicationProgress} className="h-2" />
                 <p className="text-xs text-muted-foreground mt-1 text-right">
-                  {student.maxApplications - student.applicationCount} remaining
+                  {Math.max(0, maxApplications - applicationCount)} remaining
                 </p>
               </div>
             </div>
@@ -82,11 +144,18 @@ export default function StudentApplications() {
                 <TableBody>
                   {myApplications.map((application) => (
                     <TableRow key={application.id}>
-                      <TableCell className="font-medium">{application.internshipTitle}</TableCell>
+                      <TableCell className="font-medium">
+                        <div>{application.internshipTitle}</div>
+                        {application.isReplacement && (
+                          <Badge variant="outline" className="mt-1 border-amber-500/50 text-xs text-amber-800 dark:text-amber-200">
+                            Replacement
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{application.companyName}</TableCell>
                       <TableCell className="text-muted-foreground">{application.appliedDate}</TableCell>
                       <TableCell>
-                        <StatusBadge status={application.status} />
+                        <StatusBadge status={application.status} isReplacement={application.isReplacement} />
                       </TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" onClick={() => handleViewApplication(application)}>
@@ -112,7 +181,7 @@ export default function StudentApplications() {
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-medium mb-4">Status Guide</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
               <div className="flex items-center gap-2">
                 <StatusBadge status="pending" />
                 <span className="text-sm text-muted-foreground">Under review</span>
@@ -127,7 +196,15 @@ export default function StudentApplications() {
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status="rejected" />
-                <span className="text-sm text-muted-foreground">Not selected</span>
+                <span className="text-sm text-muted-foreground">Not selected (standard applications)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status="replaced" />
+                <span className="text-sm text-muted-foreground">Replacement route — employer did not take the offer</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status="exhaust" />
+                <span className="text-sm text-muted-foreground">No seats available</span>
               </div>
             </div>
           </CardContent>
@@ -153,7 +230,7 @@ export default function StudentApplications() {
                     <h5 className="font-medium">Current Status</h5>
                     <p className="text-sm text-muted-foreground">Your application progress</p>
                   </div>
-                  <StatusBadge status={selectedApplication.status} />
+                  <StatusBadge status={selectedApplication.status} isReplacement={selectedApplication.isReplacement} />
                 </div>
               </div>
 
@@ -219,9 +296,20 @@ export default function StudentApplications() {
                       Excellent! You have been allocated this internship position. Please check your email for further instructions.
                     </p>
                   )}
-                  {selectedApplication.status === 'rejected' && (
+                  {selectedApplication.status === 'rejected' && selectedApplication.isReplacement && (
+                    <p className="text-sm text-muted-foreground">
+                      This replacement application was not taken by the employer. Your placement office may route you to another
+                      company when you are eligible.
+                    </p>
+                  )}
+                  {selectedApplication.status === 'rejected' && !selectedApplication.isReplacement && (
                     <p className="text-sm text-muted-foreground">
                       Unfortunately, your application was not successful this time. You can apply for other available positions.
+                    </p>
+                  )}
+                  {selectedApplication.status === 'exhaust' && (
+                    <p className="text-sm text-muted-foreground">
+                      This internship no longer has open seats for new allocations. Your application slot has been returned so you may apply elsewhere if you are eligible.
                     </p>
                   )}
                 </div>

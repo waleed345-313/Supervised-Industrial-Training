@@ -4,11 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FileText, Download, BarChart3, Users, Building2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { getApplications, getCompanies, getInternships, getProgressReports, getStudents } from '@/lib/api';
+import { Application, Company, Internship, ProgressReport, Student } from '@/types';
 
 export default function PlacementsReports() {
   const [viewingReport, setViewingReport] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [internships, setInternships] = useState<Internship[]>([]);
+  const [progressReports, setProgressReports] = useState<ProgressReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   const reports = [
@@ -45,6 +53,74 @@ export default function PlacementsReports() {
   const handleViewReport = (reportId: string) => {
     setViewingReport(reportId);
   };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [companiesData, studentsData, applicationsData, internshipsData, progressReportsData] =
+          await Promise.all([
+            getCompanies(),
+            getStudents(),
+            getApplications(),
+            getInternships(),
+            getProgressReports(),
+          ]);
+        setCompanies(companiesData as Company[]);
+        setStudents(studentsData as Student[]);
+        setApplications(applicationsData as Application[]);
+        setInternships(internshipsData as Internship[]);
+        setProgressReports(progressReportsData as ProgressReport[]);
+      } catch (error) {
+        console.error('Error loading reports data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load reports data.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [toast]);
+
+  const metrics = useMemo(() => {
+    const activeCompanies = companies.filter((c: any) => c?.isActive !== false).length;
+    const totalStudents = students.length;
+    const allocatedStudents = students.filter((s) => s.currentStatus === 'allocated').length;
+    const pendingStudents = Math.max(0, totalStudents - allocatedStudents);
+    const placementRate = totalStudents ? (allocatedStudents / totalStudents) * 100 : 0;
+
+    const totalApplications = applications.length;
+    const avgApplicationsPerStudent = totalStudents ? totalApplications / totalStudents : 0;
+    const acceptedApplications = applications.filter((a) => a.status === 'allocated').length;
+    const acceptanceRate = totalApplications ? (acceptedApplications / totalApplications) * 100 : 0;
+
+    const totalInternships = internships.length;
+    const totalSeats = internships.reduce((sum, i) => sum + (Number(i.seats) || 0), 0);
+
+    const prPending = progressReports.filter((r) => r.status === 'pending').length;
+    const prReviewed = progressReports.filter((r) => r.status === 'reviewed').length;
+    const prApproved = progressReports.filter((r) => r.status === 'approved').length;
+
+    return {
+      activeCompanies,
+      totalStudents,
+      allocatedStudents,
+      pendingStudents,
+      placementRate,
+      totalApplications,
+      avgApplicationsPerStudent,
+      acceptanceRate,
+      totalInternships,
+      totalSeats,
+      prPending,
+      prReviewed,
+      prApproved,
+    };
+  }, [companies, students, applications, internships, progressReports]);
 
   const handleDownloadReport = (reportId: string) => {
     const report = reports.find(r => r.id === reportId);
@@ -115,40 +191,43 @@ export default function PlacementsReports() {
                   </p>
                 </div>
                 
-                {/* Mock report data */}
+                {/* Live report data */}
                 <div className="border rounded-lg p-4 bg-muted/50">
                   <h4 className="font-medium mb-3">Report Preview</h4>
                   <div className="space-y-2 text-sm">
-                    {viewingReport === 'student-summary' && (
+                    {isLoading && <p className="text-muted-foreground">Loading data...</p>}
+                    {!isLoading && viewingReport === 'student-summary' && (
                       <>
-                        <p>• Total Students: 150</p>
-                        <p>• Allocated Students: 95 (63.3% placement rate)</p>
-                        <p>• Pending Students: 55</p>
-                        <p>• Top Specializations: Software Engineering (45), Data Science (30)</p>
+                        <p>• Total Students: {metrics.totalStudents}</p>
+                        <p>
+                          • Allocated Students: {metrics.allocatedStudents} ({metrics.placementRate.toFixed(1)}% placement rate)
+                        </p>
+                        <p>• Pending Students: {metrics.pendingStudents}</p>
                       </>
                     )}
-                    {viewingReport === 'company-partnership' && (
+                    {!isLoading && viewingReport === 'company-partnership' && (
                       <>
-                        <p>• Active Companies: 12</p>
-                        <p>• Total Internship Seats: 180</p>
-                        <p>• Average Students per Company: 7.9</p>
-                        <p>• Top Performing Companies: TechCorp Inc., DataFlow Systems</p>
+                        <p>• Active Companies: {metrics.activeCompanies}</p>
+                        <p>• Total Internships: {metrics.totalInternships}</p>
+                        <p>• Total Internship Seats: {metrics.totalSeats}</p>
+                        <p>
+                          • Average Students per Company:{' '}
+                          {metrics.activeCompanies ? (metrics.allocatedStudents / metrics.activeCompanies).toFixed(1) : '0.0'}
+                        </p>
                       </>
                     )}
-                    {viewingReport === 'application-stats' && (
+                    {!isLoading && viewingReport === 'application-stats' && (
                       <>
-                        <p>• Total Applications: 320</p>
-                        <p>• Average Applications per Student: 2.1</p>
-                        <p>• Acceptance Rate: 29.7%</p>
-                        <p>• Most Popular Specialization: Software Engineering</p>
+                        <p>• Total Applications: {metrics.totalApplications}</p>
+                        <p>• Average Applications per Student: {metrics.avgApplicationsPerStudent.toFixed(2)}</p>
+                        <p>• Acceptance Rate: {metrics.acceptanceRate.toFixed(1)}%</p>
                       </>
                     )}
-                    {viewingReport === 'monthly-progress' && (
+                    {!isLoading && viewingReport === 'monthly-progress' && (
                       <>
-                        <p>• New Allocations This Month: 15</p>
-                        <p>• Completed Internships: 8</p>
-                        <p>• Student Satisfaction Rate: 4.2/5</p>
-                        <p>• Placement Office KPI: 87% target achieved</p>
+                        <p>• Progress Reports (Pending): {metrics.prPending}</p>
+                        <p>• Progress Reports (Reviewed): {metrics.prReviewed}</p>
+                        <p>• Progress Reports (Approved): {metrics.prApproved}</p>
                       </>
                     )}
                   </div>

@@ -36,6 +36,7 @@ import {
   Calendar,
   User,
   Award,
+  RefreshCw,
 } from 'lucide-react';
 
 const menuItemsByRole: Record<UserRole, Array<{ title: string; url: string; icon: React.ElementType }>> = {
@@ -47,6 +48,7 @@ const menuItemsByRole: Record<UserRole, Array<{ title: string; url: string; icon
   manager_placements: [
     { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
     { title: 'Company Pool', url: '/placements/companies', icon: Building2 },
+    { title: 'Replacement Management', url: '/placements/replacement', icon: RefreshCw },
     { title: 'Reports', url: '/placements/reports', icon: BarChart3 },
     { title: 'My Profile', url: '/placements/profile', icon: User },
   ],
@@ -54,6 +56,8 @@ const menuItemsByRole: Record<UserRole, Array<{ title: string; url: string; icon
     { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
     { title: 'Companies', url: '/focal/companies', icon: Building2 },
     { title: 'Supervisor Assignment', url: '/focal/assignments', icon: UserCheck },
+    { title: 'Final Grading', url: '/focal/final-grading', icon: Calendar },
+    { title: 'Documents', url: '/focal/documents', icon: FileText },
     { title: 'Announcements', url: '/focal/announcements', icon: Bell },
     { title: 'Communication', url: '/focal/communication', icon: Send },
     { title: 'My Profile', url: '/focal/profile', icon: User },
@@ -64,6 +68,7 @@ const menuItemsByRole: Record<UserRole, Array<{ title: string; url: string; icon
     { title: 'Progress Reports', url: '/supervisor/progress', icon: FileText },
     { title: 'Final Grading', url: '/supervisor/final-grading', icon: Calendar },
     { title: 'Feedback', url: '/supervisor/feedback', icon: Send },
+    { title: 'Documents', url: '/supervisor/documents', icon: FileText },
     { title: 'Communication', url: '/supervisor/communication', icon: Send },
     { title: 'My Profile', url: '/supervisor/profile', icon: User },
   ],
@@ -77,6 +82,7 @@ const menuItemsByRole: Record<UserRole, Array<{ title: string; url: string; icon
   company_focal: [
     { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
     { title: 'Post Internships', url: '/company/internships', icon: Briefcase },
+    { title: 'Assignments', url: '/company/assignments', icon: UserCheck },
     { title: 'Applications', url: '/company/applications', icon: FileText },
     { title: 'Feedback', url: '/company/feedback', icon: Send },
     { title: 'Documents', url: '/company/documents', icon: Upload },
@@ -117,7 +123,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r-0" collapsible="icon">
+    <Sidebar side="left" className="border-l-0" collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold">

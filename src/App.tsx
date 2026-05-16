@@ -24,6 +24,7 @@ import AdminProfile from "./pages/admin/Profile";
 // Placements Pages
 import PlacementsCompanies from "./pages/placements/Companies";
 import PlacementsReports from "./pages/placements/Reports";
+import PlacementsReplacementManagement from "./pages/placements/ReplacementManagement";
 import ManagerPlacementsProfile from "./pages/placements/Profile";
 
 // University Focal Pages
@@ -31,6 +32,8 @@ import FocalCompanies from "./pages/focal/Companies";
 import FocalAssignments from "./pages/focal/Assignments";
 import FocalAnnouncements from "./pages/focal/Announcements";
 import FocalCommunication from "./pages/focal/Communication";
+import FocalDocuments from "./pages/focal/Documents";
+import FocalFinalGrading from "./pages/focal/FinalGrading";
 import UniversityFocalProfile from "./pages/focal/Profile";
 
 // Academic Supervisor Pages
@@ -39,6 +42,7 @@ import SupervisorProgress from "./pages/supervisor/Progress";
 import SupervisorFeedback from "./pages/supervisor/Feedback";
 import SupervisorCommunication from "./pages/supervisor/Communication";
 import SupervisorFinalGrading from "./pages/supervisor/FinalGrading";
+import SupervisorDocuments from "./pages/supervisor/Documents";
 import AcademicSupervisorProfile from "./pages/supervisor/Profile";
 
 // Industrial Supervisor Pages
@@ -54,6 +58,7 @@ import CompanyDocuments from "./pages/company/Documents";
 import CompanyCommunication from "./pages/company/Communication";
 import CompanyFeedback from "./pages/company/Feedback";
 import CompanyFocalProfile from "./pages/company/Profile";
+import CompanyAssignments from "./pages/company/Assignments";
 
 // Evaluation Panel Pages
 import PanelEvaluations from "./pages/panel/Evaluations";
@@ -88,6 +93,7 @@ const App = () => (
             
             {/* Manager Placements Routes */}
             <Route path="/placements/companies" element={<PlacementsCompanies />} />
+            <Route path="/placements/replacement" element={<PlacementsReplacementManagement />} />
             <Route path="/placements/reports" element={<PlacementsReports />} />
             <Route path="/placements/profile" element={<ManagerPlacementsProfile />} />
             
@@ -96,6 +102,8 @@ const App = () => (
             <Route path="/focal/assignments" element={<FocalAssignments />} />
             <Route path="/focal/announcements" element={<FocalAnnouncements />} />
             <Route path="/focal/communication" element={<FocalCommunication />} />
+            <Route path="/focal/documents" element={<FocalDocuments />} />
+            <Route path="/focal/final-grading" element={<FocalFinalGrading />} />
             <Route path="/focal/profile" element={<UniversityFocalProfile />} />
             
             {/* Academic Supervisor Routes */}
@@ -104,6 +112,7 @@ const App = () => (
             <Route path="/supervisor/final-grading" element={<SupervisorFinalGrading />} />
             <Route path="/supervisor/feedback" element={<SupervisorFeedback />} />
             <Route path="/supervisor/communication" element={<SupervisorCommunication />} />
+            <Route path="/supervisor/documents" element={<SupervisorDocuments />} />
             <Route path="/supervisor/profile" element={<AcademicSupervisorProfile />} />
             
             {/* Industrial Supervisor Routes */}
@@ -114,6 +123,7 @@ const App = () => (
             
             {/* Company Focal Routes */}
             <Route path="/company/internships" element={<CompanyInternships />} />
+            <Route path="/company/assignments" element={<CompanyAssignments />} />
             <Route path="/company/applications" element={<CompanyApplications />} />
             <Route path="/company/documents" element={<CompanyDocuments />} />
             <Route path="/company/feedback" element={<CompanyFeedback />} />

@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 interface StatusBadgeProps {
   status: string;
   className?: string;
+  /** When the application is a replacement route and the company declined, show "Replaced" instead of "Rejected". */
+  isReplacement?: boolean;
 }
 
 const statusLabels: Record<string, string> = {
@@ -12,6 +14,9 @@ const statusLabels: Record<string, string> = {
   shortlisted: 'Shortlisted',
   allocated: 'Allocated',
   rejected: 'Rejected',
+  replaced: 'Replaced',
+  exhaust: 'Exhaust',
+  completed: 'Completed',
   applied: 'Applied',
   not_applied: 'Not Applied',
   open: 'Open',
@@ -21,12 +26,16 @@ const statusLabels: Record<string, string> = {
   approved: 'Approved',
 };
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const colorClass = statusColors[status as keyof typeof statusColors] || 'bg-muted text-muted-foreground';
-  
+export function StatusBadge({ status, className, isReplacement }: StatusBadgeProps) {
+  const effectiveStatus = isReplacement && status === 'rejected' ? 'replaced' : status;
+  const colorClass =
+    statusColors[effectiveStatus as keyof typeof statusColors] ||
+    statusColors[status as keyof typeof statusColors] ||
+    'bg-muted text-muted-foreground';
+
   return (
     <Badge variant="outline" className={cn('border', colorClass, className)}>
-      {statusLabels[status] || status}
+      {statusLabels[effectiveStatus] || statusLabels[status] || status}
     </Badge>
   );
 }
