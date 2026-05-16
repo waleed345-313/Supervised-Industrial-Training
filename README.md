@@ -1,78 +1,60 @@
-<<<<<<< HEAD
-# Welcome to your Lovable project
+# Hi 👋, I'm Muhammad Waleed
 
-## Project info
+<a href="https://git.io/typing-svg"><img src="https://readme-typing-svg.herokuapp.com?color=00F7FF&size=28&center=true&vCenter=true&width=900&lines=Full+Stack+Developer;React+Native+Developer;MERN+Stack+Enthusiast;Open+Source+Contributor"></a>
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+<img src="https://media.giphy.com/media/qgQUggAC3Pfv687qPC/giphy.gif">
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## 🚀 About Me
+- 🔭 Currently working on **Supervised Industrial Training (SIT) Project**
+- 🌱 Learning **Advanced React Native, MERN Stack, Firebase**
+- 💬 Ask me about **React Native, Node.js, MongoDB, PHP, MySQL**
+- 🎯 Goal: Becoming a Professional Full Stack Developer
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 🛠 Tech Stack
+<img src="https://skillicons.dev/icons?i=react,nodejs,express,mongodb,firebase,php,mysql,js,html,css,figma,git,github,vscode">
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## 📊 GitHub Stats
+<img src="https://github-readme-stats.vercel.app/api?username=waleed345-313&show_icons=true&theme=tokyonight&hide_border=true">
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🔥 GitHub Streak
+<img src="https://github-readme-streak-stats.herokuapp.com/?user=waleed345-313&theme=tokyonight&hide_border=true">
 
-Follow these steps:
+---
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## 📈 Top Languages
+<img src="https://github-readme-stats.vercel.app/api/top-langs/?username=waleed345-313&layout=compact&theme=tokyonight&hide_border=true">
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+---
 
-# Step 3: Install the necessary dependencies.
-npm i
+## 🏆 GitHub Trophies
+<img src="https://github-profile-trophy.vercel.app/?username=waleed345-313&theme=tokyonight&no-frame=true&row=1">
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+---
 
-**Edit a file directly in GitHub**
+## 👀 Profile Views
+<img src="https://komarev.com/ghpvc/?username=waleed345-313&color=blue&style=for-the-badge">
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## 🌐 Connect with Me
+<a><img src="https://img.shields.io/badge/LinkedIn-blue?style=for-the-badge&logo=linkedin"></a>
+<a href="https://github.com/waleed345-313"><img src="https://img.shields.io/badge/GitHub-black?style=for-the-badge&logo=github"></a>
+<a><img src="https://img.shields.io/badge/Gmail-red?style=for-the-badge&logo=gmail"></a>
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+## 🐍 Contribution Snake Animation
+<img src="https://github.com/waleed345-313/waleed345-313/blob/output/github-contribution-grid-snake.svg">
 
-This project is built with:
+---
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
-=======
-# Supervised-Industrial-Training
-Supervised Industrial Training (SIT) is a web-based platform that automates internship management by connecting students, universities, and companies. It streamlines applications, placements, evaluations, and progress tracking for efficient industrial training.
->>>>>>> 9569aba4a57d5e0afa080516aca7e4842bbbbf7f
+## ⚡ Fun Fact
+"Code, Creativity, and Consistency build success."
