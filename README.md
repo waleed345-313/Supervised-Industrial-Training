@@ -66,6 +66,8 @@ Create `/Supervised-Industrial-Training/.env`:
 VITE_API_BASE=http://localhost:5000
 ```
 
+For production, set `VITE_API_BASE` to your backend **HTTPS** endpoint.
+
 ```bash
 npm install
 npm run dev
@@ -77,9 +79,13 @@ Create `/Supervised-Industrial-Training/backend/.env`:
 
 ```bash
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/test
+MONGODB_URI=mongodb://localhost:27017/supervised_industrial_training
 JWT_SECRET=replace_with_a_strong_secret
 ```
+
+Production recommendations:
+- Use a dedicated production database URI (do not use test databases).
+- Set `JWT_SECRET` to a cryptographically secure random string with **at least 32 characters**.
 
 ```bash
 cd backend
