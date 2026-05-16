@@ -1,4 +1,5 @@
-<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="bannerTitle">
+  <title id="bannerTitle">Supervised Industrial Training internship management banner</title>
   <style>
     .float1 {
       animation: floatA 6s ease-in-out infinite;
