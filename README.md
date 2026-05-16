@@ -6,6 +6,8 @@
   <img src="https://readme-typing-svg.herokuapp.com?font=Poppins&weight=600&size=22&duration=3000&pause=700&color=2563EB&center=true&vCenter=true&width=700&lines=Connecting+Students%2C+Universities%2C+and+Industry;Automating+Applications%2C+Placements%2C+and+Evaluations;Improving+Visibility+Across+the+Training+Lifecycle" alt="Typing Animation" />
 </p>
 
+<h1 align="center">Supervised Industrial Training (SIT)</h1>
+
 <p align="center">
   <a href="https://github.com/waleed345-313/Supervised-Industrial-Training">
     <img src="https://img.shields.io/badge/status-active-success" alt="Status" />
@@ -85,7 +87,7 @@ JWT_SECRET=replace_with_a_strong_secret
 
 Production recommendations:
 - Use a dedicated production database URI (do not use test databases).
-- Set `JWT_SECRET` to a cryptographically secure secret with **at least 256 bits of entropy (32 bytes)** for HS256 (or stronger for stronger JWT algorithms), for example a random 32-byte value encoded as a 64-character hexadecimal string.
+- Set `JWT_SECRET` to a cryptographically secure secret with at least 256 bits of entropy (32 bytes) for HS256, such as a random 32-byte value encoded as a 64-character hexadecimal string.
 - Store production secrets in a managed secret service (for example, your cloud provider’s secret manager) instead of hardcoding values.
 
 ```bash
