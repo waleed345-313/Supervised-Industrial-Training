@@ -85,7 +85,7 @@ JWT_SECRET=replace_with_a_strong_secret
 
 Production recommendations:
 - Use a dedicated production database URI (do not use test databases).
-- Set `JWT_SECRET` to a cryptographically secure secret with **at least 256 bits (32 bytes)** of entropy for HS256 (or stronger for stronger JWT algorithms), for example a 64-character hexadecimal string.
+- Set `JWT_SECRET` to a cryptographically secure secret with **at least 256 bits of entropy (32 bytes)** for HS256 (or stronger for stronger JWT algorithms), for example a 64-character hexadecimal string.
 - Store production secrets in a managed secret service (for example, your cloud provider’s secret manager) instead of hardcoding values.
 
 ```bash
