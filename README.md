@@ -42,7 +42,7 @@ It simplifies the full training lifecycle: application, placement, supervision, 
 ### Frontend Setup
 
 ```bash
-git clone <YOUR_GIT_URL>
+git clone https://github.com/waleed345-313/Supervised-Industrial-Training.git
 cd Supervised-Industrial-Training
 npm install
 npm run dev
