@@ -1,7 +1,7 @@
 # Supervised-Industrial-Training
 
 <p align="center">
-  <img src="https://readme-typing-svg.herokuapp.com?font=Poppins&weight=700&size=30&pause=1000&color=0EA5E9&center=true&vCenter=true&width=900&lines=Supervised+Industrial+Training+Platform;Internship+Management+Made+Smart+and+Efficient;Students+%7C+Universities+%7C+Companies+Connected" alt="Typing SVG" />
+  <img src="./assets/readme-banner.svg" alt="Supervised Industrial Training Animated Banner" />
 </p>
 
 <p align="center">
