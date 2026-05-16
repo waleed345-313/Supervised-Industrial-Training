@@ -52,7 +52,7 @@
 ---
 
 ## 🐍 Contribution Snake Animation
-![Snake animation](https://github.com/waleed345-313/waleed345-313/blob/output/github-contribution-grid-snake.svg)
+![Snake animation](https://raw.githubusercontent.com/waleed345-313/waleed345-313/output/github-contribution-grid-snake.svg) 
 
 ---
 
