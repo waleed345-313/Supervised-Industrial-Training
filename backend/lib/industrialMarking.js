@@ -20,6 +20,52 @@ async function getIndustrialEvaluatorIdsForCompany(companyId) {
   return rows.map((r) => r._id);
 }
 
+/**
+ * Evaluators whose monthly marks count for a student at their current placement.
+ * Includes company-registered supervisors, the assigned industrial supervisor on the
+ * allocation, and (when needed) supervisors who already submitted monthly evaluations.
+ */
+async function getIndustrialEvaluatorIdsForStudent(studentUserId, companyId) {
+  const sid =
+    mongoose.Types.ObjectId.isValid(studentUserId) ? new mongoose.Types.ObjectId(studentUserId) : null;
+  const scopeCompanyId = await resolvePlacementCompanyId(studentUserId, companyId);
+  const ids = new Set();
+
+  if (scopeCompanyId) {
+    for (const id of await getIndustrialEvaluatorIdsForCompany(scopeCompanyId)) {
+      ids.add(String(id));
+    }
+
+    if (sid) {
+      const cid = new mongoose.Types.ObjectId(String(scopeCompanyId));
+      const app = await Application.findOne({
+        studentUser: sid,
+        company: cid,
+        status: { $in: ['allocated', 'shortlisted'] },
+      })
+        .select('industrialSupervisor')
+        .lean();
+      if (app?.industrialSupervisor) {
+        ids.add(String(app.industrialSupervisor));
+      }
+    }
+  }
+
+  if (sid) {
+    const fromEvaluations = await Evaluation.distinct('evaluatorUser', {
+      studentUser: sid,
+      type: 'monthly',
+    });
+    for (const eid of fromEvaluations) {
+      if (eid) ids.add(String(eid));
+    }
+  }
+
+  return [...ids]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+}
+
 async function resolvePlacementCompanyId(studentUserId, companyIdHint) {
   if (companyIdHint && mongoose.Types.ObjectId.isValid(String(companyIdHint))) {
     return String(companyIdHint);
@@ -39,11 +85,7 @@ async function getIndustrialMarkingStats(studentUserId, companyId) {
   }
 
   const scopeCompanyId = await resolvePlacementCompanyId(studentUserId, companyId);
-  if (!scopeCompanyId) {
-    return { monthsCompleted: 0, externalOutOf50: 0, complete: false };
-  }
-
-  const evaluatorIds = await getIndustrialEvaluatorIdsForCompany(scopeCompanyId);
+  const evaluatorIds = await getIndustrialEvaluatorIdsForStudent(studentUserId, scopeCompanyId);
   if (evaluatorIds.length === 0) {
     return { monthsCompleted: 0, externalOutOf50: 0, complete: false };
   }
@@ -123,11 +165,7 @@ async function getIndustrialMonthlyBreakdown(studentUserId, companyId) {
   }
 
   const scopeCompanyId = await resolvePlacementCompanyId(studentUserId, companyId);
-  if (!scopeCompanyId) {
-    return [];
-  }
-
-  const evaluatorIds = await getIndustrialEvaluatorIdsForCompany(scopeCompanyId);
+  const evaluatorIds = await getIndustrialEvaluatorIdsForStudent(studentUserId, scopeCompanyId);
   if (evaluatorIds.length === 0) {
     return [];
   }
@@ -216,6 +254,7 @@ module.exports = {
   getIndustrialMonthlyBreakdown,
   getStudentAllocatedCompanyId,
   getIndustrialEvaluatorIdsForCompany,
+  getIndustrialEvaluatorIdsForStudent,
   TOTAL_MONTHS,
   TOTAL_WEIGHTAGE,
 };

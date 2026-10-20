@@ -1,11 +1,21 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Download } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 import { useRealtimeFocalFinalGrading } from '@/hooks/use-realtime-data';
-import type { Student } from '@/types';
+import { getFocalObeSheetExport } from '@/lib/api';
+import { downloadObeSheetPdf, type ObeSheetStudentRow } from '@/lib/obeSheetPdf';
+import {
+  ObeSheetExportDialog,
+  type ObeSheetExportOptions,
+} from '@/components/shared/ObeSheetExportDialog';
 
 interface InternalContributionRow {
   evaluatorUser: string;
@@ -18,6 +28,8 @@ interface FocalFinalGradingRow {
   studentUserId: string;
   studentId: string;
   studentName: string;
+  batch?: string;
+  section?: string;
   externalTotal: number;
   internalTotal: number;
   grandTotal: number;
@@ -43,6 +55,22 @@ function formatRegistrationNumber(raw: string) {
   if (!s) return '—';
   if (/^\d+$/.test(s)) return s.padStart(3, '0');
   return s;
+}
+
+function getLatestBatch(batchValues: string[]) {
+  const valid = batchValues
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .map((value) => {
+      const match = value.match(/\d+/);
+      return {
+        value,
+        numeric: match ? Number(match[0]) : Number.NEGATIVE_INFINITY,
+      };
+    })
+    .sort((a, b) => b.numeric - a.numeric || a.value.localeCompare(b.value));
+
+  return valid[0]?.value || 'all';
 }
 
 function EvaluatorMarksCell({ row }: { row: FocalFinalGradingRow }) {
@@ -152,20 +180,150 @@ function FinalGradingTable({
   );
 }
 
+const OBE_SHEET_DEFAULTS: ObeSheetExportOptions = {
+  title: 'IET SIT-2 (Batch 2021)',
+  instructor: 'Usman Ahmed',
+  semester: 'BSIET-8 (Spring 2025)',
+};
+
 export default function FocalFinalGrading() {
   const { data, loading } = useRealtimeFocalFinalGrading();
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState('all');
+  const [selectedSection, setSelectedSection] = useState('all');
 
   const pending: FocalFinalGradingRow[] = (data?.pending || []) as FocalFinalGradingRow[];
   const completed: FocalFinalGradingRow[] = (data?.completed || []) as FocalFinalGradingRow[];
 
+  const batchOptions = useMemo(
+    () => Array.from(new Set([...pending, ...completed].map((row) => String(row.batch || '').trim()).filter(Boolean))).sort(),
+    [pending, completed],
+  );
+
+  const latestBatch = useMemo(() => getLatestBatch(batchOptions), [batchOptions]);
+
+  useEffect(() => {
+    if (latestBatch !== 'all' && selectedBatch === 'all') {
+      setSelectedBatch(latestBatch);
+    }
+  }, [latestBatch, selectedBatch]);
+
+  const matchesFilters = (row: FocalFinalGradingRow) => {
+    const batch = String(row.batch || '').trim().toUpperCase();
+    const section = String(row.section || '').trim().toUpperCase();
+
+    const batchMatch = selectedBatch === 'all' || batch === selectedBatch.toUpperCase();
+    const sectionMatch =
+      selectedSection === 'all' ||
+      selectedSection === 'both' ||
+      section === selectedSection.toUpperCase();
+
+    return batchMatch && sectionMatch;
+  };
+
+  const filteredPending = useMemo(() => pending.filter(matchesFilters), [pending, selectedBatch, selectedSection]);
+  const filteredCompleted = useMemo(() => completed.filter(matchesFilters), [completed, selectedBatch, selectedSection]);
+
+  const handleExportObePdf = async (options: ObeSheetExportOptions = OBE_SHEET_DEFAULTS) => {
+    setExporting(true);
+    try {
+      const payload = await getFocalObeSheetExport(options);
+      const meta = payload?.meta || options;
+      const students = (payload?.students || []) as ObeSheetStudentRow[];
+
+      if (!students.length) {
+        toast({
+          title: 'No students ready for export',
+          description:
+            'PDF includes students from the Completed list (internal final grading submitted).',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      downloadObeSheetPdf(meta, students);
+      setExportDialogOpen(false);
+      toast({
+        title: 'OBE sheet downloaded',
+        description: `${students.length} student(s) included in the PDF.`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not generate OBE PDF.',
+        variant: 'destructive',
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const content = useMemo(() => {
     return (
       <div className="space-y-8">
-        <FinalGradingTable title="Pending" rows={pending} />
-        <FinalGradingTable title="Completed" rows={completed} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Filter students</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="batch-filter">Batch</Label>
+                <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                  <SelectTrigger id="batch-filter">
+                    <SelectValue placeholder="All batches" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All batches</SelectItem>
+                    {batchOptions.map((batch) => (
+                      <SelectItem key={batch} value={batch}>{batch}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="section-filter">Section</Label>
+                <Select value={selectedSection} onValueChange={setSelectedSection}>
+                  <SelectTrigger id="section-filter">
+                    <SelectValue placeholder="All sections" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All sections</SelectItem>
+                    <SelectItem value="A">A</SelectItem>
+                    <SelectItem value="B">B</SelectItem>
+                    <SelectItem value="both">Both</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedBatch('all');
+                    setSelectedSection('all');
+                  }}
+                >
+                  Reset filters
+                </Button>
+              </div>
+
+              <div className="flex items-end text-sm text-muted-foreground">
+                Showing {filteredPending.length + filteredCompleted.length} student(s) across the selected batch/section.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <FinalGradingTable title="Pending" rows={filteredPending} />
+        <FinalGradingTable title="Completed" rows={filteredCompleted} />
       </div>
     );
-  }, [pending, completed]);
+  }, [batchOptions, filteredCompleted, filteredPending, selectedBatch, selectedSection]);
 
   return (
     <DashboardLayout>
@@ -173,6 +331,19 @@ export default function FocalFinalGrading() {
         <PageHeader
           title="Final Grading"
           description="Structured overview of internal (academic + panel) and external (industrial) marks. Totals are auto-calculated out of 100."
+          action={
+            <Button onClick={() => setExportDialogOpen(true)} disabled={loading}>
+              <Download className="h-4 w-4 mr-2" />
+              Export OBE Sheet (PDF)
+            </Button>
+          }
+        />
+
+        <ObeSheetExportDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          exporting={exporting}
+          onExport={handleExportObePdf}
         />
 
         {loading ? (
@@ -188,4 +359,3 @@ export default function FocalFinalGrading() {
     </DashboardLayout>
   );
 }
-

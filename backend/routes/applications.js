@@ -17,6 +17,7 @@ const {
   focalVisibleApplicationFilter,
   isHiddenFromCompanyFocal,
 } = require('../lib/focalApplications');
+const { mergeStudentSpecializations } = require('../lib/studentSpecializations');
 
 const router = express.Router();
 
@@ -52,6 +53,9 @@ function normalizeApplication(doc) {
     appliedDate: applied instanceof Date ? applied.toISOString().slice(0, 10) : String(applied || '').slice(0, 10),
     remarks: o.remarks,
     studentCGPA: studentCGPA ? Number(studentCGPA).toFixed(2) : null,
+    studentSpecializations: Array.isArray(o.studentSpecializations)
+      ? o.studentSpecializations.map((s) => String(s))
+      : [],
     isReplacement: Boolean(o.isReplacement),
   };
 }
@@ -163,7 +167,7 @@ router.post('/', auth, async (req, res) => {
       return res.status(403).json({ msg: 'Only students can apply' });
     }
 
-    const { internshipId, internshipTitle, companyName, remarks } = req.body;
+    const { internshipId, internshipTitle, companyName, remarks, studentSpecializations } = req.body;
 
     const globalDeadline = await getGlobalApplicationDeadlineDate();
     if (globalDeadline && Date.now() > globalDeadline.getTime()) {
@@ -199,6 +203,23 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ msg: 'You have already applied for this internship' });
     }
 
+    const targetSpecs = (intern.specializations || []).map((s) => String(s).trim()).filter(Boolean);
+    const selected = Array.isArray(studentSpecializations)
+      ? studentSpecializations.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+    if (selected.length < 1) {
+      return res.status(400).json({ msg: 'Select at least one specialization for this application' });
+    }
+    if (targetSpecs.length < 1) {
+      return res.status(400).json({ msg: 'This internship has no target specializations configured' });
+    }
+    const invalid = selected.filter((s) => !targetSpecs.includes(s));
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        msg: 'Selected specialization(s) must be from this opportunity’s target list',
+      });
+    }
+
     const application = new Application({
       studentUser: user._id,
       studentName: user.name,
@@ -207,6 +228,7 @@ router.post('/', auth, async (req, res) => {
       company: intern.company?._id || intern.company,
       companyName: companyName || (intern.company && intern.company.name) || '',
       status: 'pending',
+      studentSpecializations: selected,
       remarks: remarks || undefined,
     });
     await application.save();
@@ -216,6 +238,7 @@ router.post('/', auth, async (req, res) => {
     if (stud) {
       stud.applicationCount = (stud.applicationCount || 0) + 1;
       if (stud.currentStatus === 'not_applied') stud.currentStatus = 'applied';
+      mergeStudentSpecializations(stud, selected);
       await stud.save();
     }
 

@@ -11,6 +11,7 @@ const auth = require('../middleware/auth');
 const { getIndustrialMarkingStats, getStudentAllocatedCompanyId } = require('../lib/industrialMarking');
 const { serializeFinalGrade } = require('../lib/serializeFinalGrade');
 const { letterGrade } = require('../lib/finalGradeAggregate');
+const { collectObeSheetExportRows } = require('../lib/obeSheetData');
 
 const router = express.Router();
 
@@ -40,6 +41,35 @@ function getUniqueEvaluatorCounts(internalEvaluations) {
   return { academicCount: academic.size, panelCount: panel.size };
 }
 
+router.get('/final-grading/obe-sheet', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('role');
+    if (!user || !['university_focal', 'admin', 'manager_placements'].includes(user.role)) {
+      return res.status(403).json({ msg: 'Not allowed' });
+    }
+
+    const title = String(req.query.title || '').trim();
+    const instructor = String(req.query.instructor || '').trim();
+    const semester = String(req.query.semester || '').trim();
+
+    const students = await collectObeSheetExportRows();
+
+    res.json({
+      meta: {
+        title: title || 'IET SIT-2 OBE Sheet',
+        instructor: instructor || '',
+        semester: semester || 'Spring 2025',
+        generatedAt: new Date().toISOString(),
+        studentCount: students.length,
+      },
+      students,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
 router.get('/final-grading', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('role');
@@ -55,7 +85,9 @@ router.get('/final-grading', auth, async (req, res) => {
       Student.find({ user: { $in: studentOids } })
         .select('user studentId')
         .lean(),
-      User.find({ _id: { $in: studentOids }, role: 'student' }).select('name email _id studentId').lean(),
+      User.find({ _id: { $in: studentOids }, role: 'student' })
+        .select('name email _id studentId batch section')
+        .lean(),
     ]);
 
     const studentByUserId = new Map(students.map((s) => [String(s.user), s]));
@@ -77,8 +109,9 @@ router.get('/final-grading', auth, async (req, res) => {
     for (const uid of studentOids) {
       const studentUserId = String(uid);
       const studentRow = studentByUserId.get(studentUserId);
-      const studentId = studentRow?.studentId || userByUserId.get(studentUserId)?.studentId || '';
-      const studentName = userByUserId.get(studentUserId)?.name || gradeByUserId.get(studentUserId)?.studentName || '';
+      const studentDetails = userByUserId.get(studentUserId) || {};
+      const studentId = studentRow?.studentId || studentDetails.studentId || '';
+      const studentName = studentDetails.name || gradeByUserId.get(studentUserId)?.studentName || '';
 
       const cid = await getStudentAllocatedCompanyId(studentUserId);
       const stats = await getIndustrialMarkingStats(studentUserId, cid);
@@ -102,6 +135,8 @@ router.get('/final-grading', auth, async (req, res) => {
         studentUserId,
         studentId,
         studentName,
+        batch: studentDetails.batch || '',
+        section: studentDetails.section || '',
         externalTotal,
         internalTotal,
         grandTotal,

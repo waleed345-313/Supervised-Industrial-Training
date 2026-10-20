@@ -62,7 +62,6 @@ import CompanyAssignments from "./pages/company/Assignments";
 
 // Evaluation Panel Pages
 import PanelEvaluations from "./pages/panel/Evaluations";
-import PanelReports from "./pages/panel/Reports";
 import PanelGrades from "./pages/panel/Grades";
 import EvaluationPanelProfile from "./pages/panel/Profile";
 
@@ -132,7 +131,6 @@ const App = () => (
             
             {/* Evaluation Panel Routes */}
             <Route path="/panel/evaluations" element={<PanelEvaluations />} />
-            <Route path="/panel/reports" element={<PanelReports />} />
             <Route path="/panel/grades" element={<PanelGrades />} />
             <Route path="/panel/profile" element={<EvaluationPanelProfile />} />
             

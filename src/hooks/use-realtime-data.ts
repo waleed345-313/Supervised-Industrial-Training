@@ -280,19 +280,6 @@ export function useRealtimePanelFinalGrades() {
   });
 }
 
-export function useRealtimePanelProgressReports() {
-  return useRealtimeData({
-    fetchFn: async () => {
-      const { getPanelProgressReports } = await import('@/lib/api');
-      return getPanelProgressReports();
-    },
-    socketEvent: 'panel:update',
-    updateTypes: ['progress-reports'],
-    initialData: [],
-    pollingInterval: 30000,
-  });
-}
-
 export function useRealtimeFocalFinalGrading() {
   return useRealtimeData({
     fetchFn: async () => {

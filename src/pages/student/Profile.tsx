@@ -16,8 +16,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { getStudentApplications, getStudentDocuments } from '@/lib/api';
+import api, { getStudentApplications, getStudentDocuments } from '@/lib/api';
+import { useChangePassword } from '@/hooks/use-change-password';
+import { ChangePasswordFields } from '@/components/profile/ChangePasswordFields';
+import { CnicNumberField, cnicFieldRemountKey } from '@/components/profile/CnicNumberField';
+import { cnicNumberSchema } from '@/lib/cnic';
 import type { Document as StoredDocument } from '@/types';
+import { studentSpecializationList } from '@/lib/studentSpecializations';
 
 /** Primary badge under student name: mirrors company-uploaded letters (acceptance → allocated SIT-I; completion SIT 1 → SIT-II; completion SIT II → Completed SIT). Uses uploaded document types when sitPhase wasn’t synced. */
 function specializationOrSitBadge(
@@ -29,7 +34,7 @@ function specializationOrSitBadge(
   },
 ): { label: string; title: string } {
   if (!student) {
-    return { label: 'Specialization not set', title: '' };
+    return { label: 'Not allocated', title: '' };
   }
 
   if (
@@ -64,10 +69,9 @@ function specializationOrSitBadge(
         'Company has uploaded your acceptance letter for SIT I (you are allocated). This updates to SIT-II when the completion letter for SIT I is uploaded.',
     };
   }
-  const spec = student.specialization?.trim();
   return {
-    label: spec || 'Specialization not set',
-    title: spec ? '' : 'Set your specialization with the university when not yet in an allocated placement.',
+    label: 'Not allocated',
+    title: 'Apply to an internship to begin supervised industrial training (SIT-I).',
   };
 }
 
@@ -75,6 +79,8 @@ export default function StudentProfile() {
   const { user, refreshSessionUser, initialSessionResolved } = useAuth();
   const student = user as Student;
   const { toast } = useToast();
+  const password = useChangePassword();
+  const [formRevision, setFormRevision] = useState(0);
   const [appHasAllocated, setAppHasAllocated] = useState(false);
   const [docHints, setDocHints] = useState({
     hasSit1CompletionLetter: false,
@@ -130,7 +136,12 @@ export default function StudentProfile() {
   const cgpaDisplay =
     typeof student?.cgpa === 'number' && !Number.isNaN(student.cgpa) ? student.cgpa.toFixed(2) : '—';
   const avatarLetters = nameParts.map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'S';
-  const progBadge = useMemo(
+  const specializationBadges = useMemo(
+    () => studentSpecializationList(student),
+    [student?.specializations, student?.specialization],
+  );
+
+  const sitStatusBadge = useMemo(
     () =>
       specializationOrSitBadge(student, {
         hasAllocatedApplication: appHasAllocated,
@@ -152,15 +163,7 @@ export default function StudentProfile() {
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     email: z.string().email('Invalid email address'),
-    cnicNumber: z
-      .string()
-      .optional()
-      .refine(
-        (val) => !val || /^\d{5}-\d{7}-\d$/.test(val),
-        {
-          message: 'CNIC must be in format 12345-1234567-1',
-        }
-      ),
+    cnicNumber: cnicNumberSchema,
   });
   type ProfileFormData = z.infer<typeof profileSchema>;
 
@@ -174,12 +177,33 @@ export default function StudentProfile() {
     },
   });
 
-  const handleSave = (data: ProfileFormData) => {
-    toast({
-      title: 'Profile Updated',
-      description: 'Your profile changes have been saved successfully.',
-    });
-    console.log('form data', data);
+  const handleSave = async (data: ProfileFormData) => {
+    if (!user) return;
+    const pwOk = await password.submitPasswordChange();
+    if (!pwOk) return;
+
+    try {
+      const updatedName = `${data.firstName} ${data.lastName}`.trim();
+      await api.updateUser(user.id, {
+        name: updatedName,
+        email: data.email,
+        cnicNumber: data.cnicNumber || undefined,
+      });
+      await refreshSessionUser();
+      setFormRevision((n) => n + 1);
+
+      toast({
+        title: 'Profile Updated',
+        description: 'Your profile changes have been saved successfully.',
+      });
+    } catch (error) {
+      console.error('Error updating profile', error);
+      toast({
+        title: 'Update Failed',
+        description: 'There was a problem saving your changes. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -205,14 +229,37 @@ export default function StudentProfile() {
                 {student?.cnicNumber && (
                   <p className="text-sm text-muted-foreground mt-1">CNIC: {student.cnicNumber}</p>
                 )}
+                {student?.batch && (
+                  <p className="text-sm text-muted-foreground mt-1">Batch: {student.batch}</p>
+                )}
+
+                <div className="w-full mt-5 rounded-lg border border-border/80 bg-muted/30 p-3 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    Specialization(s)
+                  </p>
+                  {specializationBadges.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {specializationBadges.map((spec) => (
+                        <Badge key={spec} variant="outline" className="text-xs font-normal whitespace-normal text-left">
+                          {spec}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Not set yet. Choose one or more when you apply to an opportunity.
+                    </p>
+                  )}
+                </div>
+
                 <Badge
-                  className="mt-2"
+                  className="mt-4"
                   variant="secondary"
-                  title={progBadge.title || undefined}
+                  title={sitStatusBadge.title || undefined}
                 >
-                  {progBadge.label}
+                  {sitStatusBadge.label}
                 </Badge>
-                
+
                 <Separator className="my-6" />
                 
                 <div className="w-full space-y-4 text-left">
@@ -302,66 +349,26 @@ export default function StudentProfile() {
                     )}
                   />
 
-                  <Separator />
-
                   <FormField
                     control={form.control}
                     name="cnicNumber"
                     render={({ field }) => (
-                      <FormItem className="max-w-md">
-                        <FormLabel>CNIC Number</FormLabel>
-                        <FormControl>
-                          <Input placeholder="12345-1234567-1" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <CnicNumberField
+                        key={cnicFieldRemountKey(student?.cnicNumber, formRevision)}
+                        field={field}
+                        savedCnic={student?.cnicNumber}
+                      />
                     )}
                   />
 
-                  <Separator />
-
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">Change Password</h3>
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="currentPassword"
-                          type="password"
-                          className="pl-10"
-                          placeholder="Enter current password"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="newPassword"
-                          type="password"
-                          className="pl-10"
-                          placeholder="Enter new password"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="confirmPassword"
-                          type="password"
-                          className="pl-10"
-                          placeholder="Confirm new password"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <ChangePasswordFields {...password} />
 
                   <div className="flex justify-end gap-4">
-                    <Button variant="outline" type="button" onClick={() => form.reset()}>
+                    <Button variant="outline" type="button" onClick={() => {
+                      form.reset();
+                      password.resetPasswordFields();
+                      setFormRevision((n) => n + 1);
+                    }}>
                       Cancel
                     </Button>
                     <Button type="submit">Save Changes</Button>

@@ -25,6 +25,7 @@ import {
   getStudentsForMyCompany,
   submitIndustrialEvaluation,
 } from '@/lib/api';
+import { StudentSpecializationsDisplay } from '@/components/shared/StudentSpecializationsDisplay';
 
 // PLO-based evaluation schema matching the Industry Evaluation Sheet
 const evaluationSchema = z.object({
@@ -336,7 +337,9 @@ export function IndustrialSupervisorDashboard() {
                   <TableRow key={student.id}>
                     <TableCell className="font-medium">{student.name}</TableCell>
                     <TableCell className="text-muted-foreground">{student.studentId}</TableCell>
-                    <TableCell className="text-muted-foreground">{student.specialization}</TableCell>
+                    <TableCell>
+                      <StudentSpecializationsDisplay student={student} />
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{student.industrialSupervisorName || 'Assigned to you'}</TableCell>
                     <TableCell>
                       <Button variant="outline" size="sm" onClick={() => handleEvaluate(student)}>

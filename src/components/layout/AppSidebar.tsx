@@ -91,7 +91,6 @@ const menuItemsByRole: Record<UserRole, Array<{ title: string; url: string; icon
   ],
   evaluation_panel: [
     { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
-    { title: 'Student Reports', url: '/panel/reports', icon: FileText },
     { title: 'Evaluations', url: '/panel/evaluations', icon: ClipboardCheck },
     { title: 'Final Grading', url: '/panel/grades', icon: Calendar },
     { title: 'My Profile', url: '/panel/profile', icon: User },

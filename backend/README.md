@@ -98,13 +98,11 @@ The server will run on `http://localhost:5000`
 - `PUT /api/documents/:id` - Update document
 - `DELETE /api/documents/:id` - Delete document
 
-## Database Setup
+## Database Setup (local)
 
-1. Create a MongoDB Atlas account
-2. Create a new cluster
-3. Create a database named `sit-project`
-4. Create collections for each model (users, students, companies, etc.)
-5. Update the connection string in `.env`
+1. Install and start MongoDB Community Server on `localhost:27017`
+2. In Compass, connect with the same URI as `MONGODB_URI` in `.env` (default `mongodb://localhost:27017/test`)
+3. Collections are created automatically when the app writes data (users, students, companies, etc.)
 
 ## Technologies Used
 

@@ -6,7 +6,6 @@ const Application = require('../models/Application');
 const Company = require('../models/Company');
 const Evaluation = require('../models/Evaluation');
 const FinalGrade = require('../models/FinalGrade');
-const ProgressReport = require('../models/ProgressReport');
 const auth = require('../middleware/auth');
 const { getIndustrialMarkingStats, getIndustrialMonthlyBreakdown, getStudentAllocatedCompanyId } = require('../lib/industrialMarking');
 const { serializeFinalGrade, getContributionList } = require('../lib/serializeFinalGrade');
@@ -331,29 +330,6 @@ router.post('/final-grades', auth, async (req, res) => {
     const cid = await getStudentAllocatedCompanyId(studentId);
     const statsOut = await getIndustrialMarkingStats(studentId, cid);
     res.json(serializeFinalGrade(finalGrade, statsOut));
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
-  }
-});
-
-// @route   GET /api/panel/progress-reports
-// @desc    Get progress reports for all allocated students (panel view)
-router.get('/progress-reports', auth, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user || user.role !== 'evaluation_panel') {
-      return res.status(403).json({ msg: 'Not allowed' });
-    }
-
-    const students = await Student.find({ currentStatus: 'allocated' }).select('user');
-    const studentUserIds = students.map(s => String(s.user));
-
-    const reports = await ProgressReport.find({
-      studentUser: { $in: studentUserIds },
-    }).sort({ submittedDate: -1 });
-
-    res.json(reports);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');

@@ -16,6 +16,7 @@ import { Student, User, Company } from '@/types';
 import api, { API_BASE } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { io, type Socket } from 'socket.io-client';
+import { StudentSpecializationsDisplay } from '@/components/shared/StudentSpecializationsDisplay';
 
 export default function CompanyAssignments() {
   const { toast } = useToast();
@@ -339,7 +340,9 @@ export default function CompanyAssignments() {
                       <TableCell className="text-muted-foreground">
                         {industrial?.name || <span className="text-muted-foreground">No Industrial Supervisor</span>}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{student.specialization}</TableCell>
+                      <TableCell>
+                        <StudentSpecializationsDisplay student={student} />
+                      </TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" onClick={() => handleViewStudentDetails(student)}>
                           <Eye className="h-4 w-4 mr-2" />
@@ -542,11 +545,13 @@ export default function CompanyAssignments() {
                     <p className="text-sm text-muted-foreground">{viewingStudent.email}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">Specialization</Label>
-                    <p className="text-sm text-muted-foreground">{viewingStudent.specialization}</p>
+                <div>
+                  <Label className="text-sm font-medium">Specialization(s)</Label>
+                  <div className="mt-2">
+                    <StudentSpecializationsDisplay student={viewingStudent} />
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium">CGPA</Label>
                     <p className="text-sm text-muted-foreground">{viewingStudent.cgpa}</p>

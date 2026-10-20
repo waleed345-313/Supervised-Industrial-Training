@@ -5,12 +5,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { useRealtimePanelStudents, useRealtimePanelEvaluations, useRealtimePanelProgressReports } from '@/hooks/use-realtime-data';
-import { FileText, ClipboardCheck, Calendar, Award, Eye, User, GraduationCap, Building } from 'lucide-react';
-import { StatusBadge } from '@/components/shared/StatusBadge';
+import { useRealtimePanelStudents, useRealtimePanelEvaluations, useRealtimePanelFinalGrades } from '@/hooks/use-realtime-data';
+import { ClipboardCheck, Calendar, Award, Eye, User, GraduationCap, Building } from 'lucide-react';
 import { useState } from 'react';
 import { Student, Evaluation, IndustrialMonthlyEvaluationRow } from '@/types';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  gradeBadgeVariant,
+  internalMarksToPercent,
+  letterGradeFromInternalOutOf50,
+  panelMemberHasMarkedStudent,
+  studentsEligibleForPanelFinalGrading,
+  type PanelFinalGradeLike,
+} from '@/lib/panelGrading';
 
 function combinedProgressPercent(student: Student): number {
   const ext = Number(student.industrialExternalTotal ?? 0);
@@ -43,12 +52,20 @@ function formatIndustrialMonthOutOf125(slot: IndustrialMonthlyEvaluationRow): st
 }
 
 export function EvaluationPanelDashboard() {
+  const { user } = useAuth();
   const { data: students = [], loading: studentsLoading } = useRealtimePanelStudents();
   const { data: evaluations = [], loading: evalsLoading } = useRealtimePanelEvaluations();
-  const { data: reports = [], loading: reportsLoading } = useRealtimePanelProgressReports();
+  const { data: finalGrades = [], loading: gradesLoading } = useRealtimePanelFinalGrades();
 
-  const loading = studentsLoading || evalsLoading || reportsLoading;
+  const loading = studentsLoading || evalsLoading || gradesLoading;
   const allocatedStudents = students.filter((s: Student) => s.currentStatus === 'allocated');
+  const eligibleStudents = studentsEligibleForPanelFinalGrading(students);
+  const completedStudents = eligibleStudents.filter((s: Student) =>
+    panelMemberHasMarkedStudent(s.id, finalGrades as PanelFinalGradeLike[], user?.id)
+  );
+  const pendingStudents = eligibleStudents.filter(
+    (s: Student) => !panelMemberHasMarkedStudent(s.id, finalGrades as PanelFinalGradeLike[], user?.id)
+  );
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -75,39 +92,112 @@ export function EvaluationPanelDashboard() {
       />
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Students to Evaluate"
-          value={loading ? 0 : allocatedStudents.length}
-          description="This cycle"
+          value={loading ? 0 : eligibleStudents.length}
+          description="Industrial marking complete"
           icon={<ClipboardCheck className="h-5 w-5" />}
         />
         <StatCard
-          title="Reports Received"
-          value={loading ? 0 : reports.length}
-          description="From supervisors"
-          icon={<FileText className="h-5 w-5" />}
-        />
-        <StatCard
           title="Evaluations Done"
-          value={loading ? 0 : evaluations.length}
-          description="Completed"
+          value={loading ? 0 : completedStudents.length}
+          description="Your completed grading"
           icon={<Award className="h-5 w-5" />}
         />
         <StatCard
           title="Pending"
-          value={loading ? 0 : Math.max(0, allocatedStudents.length - evaluations.length)}
-          description="Awaiting grading"
+          value={loading ? 0 : pendingStudents.length}
+          description="Awaiting your grading"
           icon={<Calendar className="h-5 w-5" />}
         />
       </div>
+
+      {/* Completed panel evaluations */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Award className="h-5 w-5" />
+            Completed Evaluations
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Student</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead>Internal (/50)</TableHead>
+                <TableHead>%</TableHead>
+                <TableHead>Grade</TableHead>
+                <TableHead className="text-center">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    Loading…
+                  </TableCell>
+                </TableRow>
+              ) : completedStudents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No completed evaluations yet. Submit final grades from the Final Grading page.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                completedStudents.map((student: Student) => {
+                  const finalGrade = finalGrades.find(
+                    (g: PanelFinalGradeLike) => String(g.studentUser) === String(student.id)
+                  );
+                  const myInternal = finalGrade?.internalEvaluations?.find(
+                    (e) => String(e.evaluatorUser) === String(user?.id)
+                  )?.internalTotal;
+                  const letter =
+                    typeof myInternal === 'number'
+                      ? letterGradeFromInternalOutOf50(myInternal)
+                      : null;
+                  const pct =
+                    typeof myInternal === 'number' ? internalMarksToPercent(myInternal) : null;
+
+                  return (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{student.allocatedCompany || 'N/A'}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {typeof myInternal === 'number' ? myInternal.toFixed(2) : '—'}
+                      </TableCell>
+                      <TableCell className="tabular-nums text-muted-foreground">
+                        {pct !== null ? `${pct.toFixed(1)}%` : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {letter ? (
+                          <Badge variant={gradeBadgeVariant(letter)}>{letter}</Badge>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button variant="outline" size="sm" onClick={() => handleViewEvaluation(student)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Students Overview */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ClipboardCheck className="h-5 w-5" />
-            Student Evaluations
+            Student Progress Overview
           </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -207,54 +297,6 @@ export function EvaluationPanelDashboard() {
         </CardContent>
       </Card>
 
-      {/* Progress Reports */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Submitted Reports
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Month</TableHead>
-                <TableHead>Industrial Remarks</TableHead>
-                <TableHead>Academic Remarks</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading || reports.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    No data found yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                reports.map((report: any) => (
-                  <TableRow key={report._id || report.id}>
-                    <TableCell className="font-medium">{report.studentName}</TableCell>
-                    <TableCell className="text-muted-foreground">{report.month}</TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate">
-                      {report.industrialRemarks || 'Pending'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate">
-                      {report.academicRemarks || 'Pending'}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={report.status} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
       {/* View Evaluation Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
@@ -346,13 +388,40 @@ export function EvaluationPanelDashboard() {
                 ) : null}
               </div>
 
-              {/* Progress Reports Summary */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Progress Reports</h4>
-                <div className="text-sm text-muted-foreground">
-                  {reports.filter((r: any) => String(r.studentUser) === selectedStudent.id).length} reports submitted
+              {panelMemberHasMarkedStudent(
+                selectedStudent.id,
+                finalGrades as PanelFinalGradeLike[],
+                user?.id
+              ) ? (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                    Your panel evaluation
+                  </h4>
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <p className="text-sm text-muted-foreground">Internal marks you submitted</p>
+                    <div className="text-right">
+                      {(() => {
+                        const fg = finalGrades.find(
+                          (g: PanelFinalGradeLike) => String(g.studentUser) === String(selectedStudent.id)
+                        );
+                        const mi = fg?.internalEvaluations?.find(
+                          (e) => String(e.evaluatorUser) === String(user?.id)
+                        )?.internalTotal;
+                        if (typeof mi !== 'number') return <span className="text-muted-foreground">—</span>;
+                        const pct = internalMarksToPercent(mi);
+                        const letter = letterGradeFromInternalOutOf50(mi);
+                        return (
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-2xl font-bold text-primary tabular-nums">{mi.toFixed(2)}/50</span>
+                            <span className="text-sm text-muted-foreground tabular-nums">{pct.toFixed(1)}%</span>
+                            <Badge variant={gradeBadgeVariant(letter)}>{letter}</Badge>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           )}
         </DialogContent>

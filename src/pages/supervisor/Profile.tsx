@@ -8,17 +8,41 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { User, Mail, Lock } from 'lucide-react';
+import { User, Mail } from 'lucide-react';
+import { useChangePassword } from '@/hooks/use-change-password';
+import { ChangePasswordFields } from '@/components/profile/ChangePasswordFields';
+import api from '@/lib/api';
 
 export default function AcademicSupervisorProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const password = useChangePassword();
 
-  const handleSave = () => {
-    toast({
-      title: 'Profile Updated',
-      description: 'Your profile changes have been saved successfully.',
-    });
+  const handleSave = async () => {
+    if (!user) return;
+    const pwOk = await password.submitPasswordChange();
+    if (!pwOk) return;
+
+    try {
+      const firstName = (document.getElementById('firstName') as HTMLInputElement)?.value?.trim();
+      const lastName = (document.getElementById('lastName') as HTMLInputElement)?.value?.trim();
+      const email = (document.getElementById('email') as HTMLInputElement)?.value?.trim();
+      const name = [firstName, lastName].filter(Boolean).join(' ').trim() || user.name;
+
+      await api.updateUser(user.id, { name, email });
+
+      toast({
+        title: 'Profile Updated',
+        description: 'Your profile changes have been saved successfully.',
+      });
+    } catch (error) {
+      console.error('Error updating profile', error);
+      toast({
+        title: 'Update Failed',
+        description: 'There was a problem saving your changes. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (!user) return null;
@@ -94,51 +118,11 @@ export default function AcademicSupervisorProfile() {
                 </div>
               </div>
 
-              <Separator />
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Change Password</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword">Current Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="currentPassword"
-                      type="password"
-                      className="pl-10"
-                      placeholder="Enter current password"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword">New Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      className="pl-10"
-                      placeholder="Enter new password"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      className="pl-10"
-                      placeholder="Confirm new password"
-                    />
-                  </div>
-                </div>
-              </div>
+              <ChangePasswordFields {...password} />
 
               <div className="flex justify-end gap-4">
-                <Button variant="outline">Cancel</Button>
-                <Button onClick={handleSave}>Save Changes</Button>
+                <Button type="button" variant="outline" onClick={password.resetPasswordFields}>Cancel</Button>
+                <Button type="button" onClick={handleSave}>Save Changes</Button>
               </div>
             </CardContent>
           </Card>

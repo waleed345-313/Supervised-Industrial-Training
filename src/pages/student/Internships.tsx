@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { SpecializationCheckboxGroup } from '@/components/shared/SpecializationCheckboxGroup';
 import { Internship, Student } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,6 +25,7 @@ import { mapInternshipFromApi } from '@/lib/internshipMap';
 import { getApplicationDeadline } from '@/lib/api';
 
 const applicationSchema = z.object({
+  studentSpecializations: z.array(z.string()).min(1, 'Select at least one specialization'),
   coverLetter: z.string().min(100, "Cover letter must be at least 100 characters").max(2000, "Cover letter must be less than 2000 characters"),
   whyInterested: z.string().min(50, "Please provide at least 50 characters").max(500, "Response must be less than 500 characters"),
   relevantExperience: z.string().min(30, "Please provide at least 30 characters").max(500, "Response must be less than 500 characters"),
@@ -32,7 +34,7 @@ const applicationSchema = z.object({
 type ApplicationFormData = z.infer<typeof applicationSchema>;
 
 export default function StudentInternships() {
-  const { user } = useAuth();
+  const { user, refreshSessionUser } = useAuth();
   const student = user as Student;
   const [searchQuery, setSearchQuery] = useState('');
   const [specializationFilter, setSpecializationFilter] = useState('all');
@@ -110,6 +112,7 @@ export default function StudentInternships() {
   const form = useForm<ApplicationFormData>({
     resolver: zodResolver(applicationSchema),
     defaultValues: {
+      studentSpecializations: [],
       coverLetter: "",
       whyInterested: "",
       relevantExperience: "",
@@ -126,6 +129,12 @@ export default function StudentInternships() {
       return;
     }
     setSelectedInternship(internship);
+    form.reset({
+      studentSpecializations: [],
+      coverLetter: '',
+      whyInterested: '',
+      relevantExperience: '',
+    });
     setIsDialogOpen(true);
   };
 
@@ -183,6 +192,7 @@ export default function StudentInternships() {
         internshipId: selectedInternship.id,
         internshipTitle: selectedInternship.title,
         companyName: selectedInternship.company.name,
+        studentSpecializations: data.studentSpecializations,
         remarks,
       });
 
@@ -205,6 +215,7 @@ export default function StudentInternships() {
       setSelectedInternship(null);
       setResumeFile(null);
       form.reset();
+      await refreshSessionUser();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not submit application.';
       toast({
@@ -435,6 +446,25 @@ export default function StudentInternships() {
 
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="studentSpecializations"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Your specialization(s) for this application *</FormLabel>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Select one or more from the target specializations defined by the company.
+                      </p>
+                      <SpecializationCheckboxGroup
+                        options={selectedInternship?.specializations ?? []}
+                        value={field.value ?? []}
+                        onChange={field.onChange}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 {/* Resume Upload */}
                 <div className="space-y-2">
                   <Label>Resume / CV *</Label>

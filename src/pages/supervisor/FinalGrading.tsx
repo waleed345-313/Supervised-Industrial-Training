@@ -14,13 +14,18 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useRealtimeSupervisorFinalGradingStudents } from '@/hooks/use-realtime-data';
 import { useRealtimeFinalGrades } from '@/hooks/use-realtime-data';
-import { submitFinalGrade, exportFinalGrades } from '@/lib/api';
-import { Award, Download, Eye, Pencil } from 'lucide-react';
-import { Slider } from "@/components/ui/slider";
+import { submitFinalGrade } from '@/lib/api';
+import { Award, Eye, Pencil } from 'lucide-react';
 import { Separator } from "@/components/ui/separator";
+import { FinalGradingScoreInput } from "@/components/shared/FinalGradingScoreInput";
+import { FinalGradingInternalMarkingSummary } from "@/components/shared/FinalGradingInternalMarkingSummary";
+import { FinalGradingRubricBreakdown } from "@/components/shared/FinalGradingRubricBreakdown";
+import { FinalGradingInternalSummaryCard } from "@/components/shared/FinalGradingInternalSummaryCard";
+import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Student } from "@/types";
 import { industrialExternalFromStudent } from "@/lib/utils";
+import { clampHandlingOfQuestions } from "@/lib/panelGrading";
 
 interface InternalEvalContribution {
   evaluatorUser: string;
@@ -31,6 +36,8 @@ interface InternalEvalContribution {
   presentationSkills: number;
   organization: number;
   handlingOfQuestions: number;
+  modernToolUsage?: number;
+  ethics?: number;
   reportScore: number;
   internalTotal: number;
   remarks?: string;
@@ -46,6 +53,8 @@ interface FinalGrade {
   presentationSkills: number;
   organization: number;
   handlingOfQuestions: number;
+  modernToolUsage?: number;
+  ethics?: number;
   reportScore: number;
   presentationAvg: number;
   internalTotal: number;
@@ -63,7 +72,9 @@ const gradeSchema = z.object({
   visuals: z.number().min(0).max(10),
   presentationSkills: z.number().min(0).max(10),
   organization: z.number().min(0).max(10),
-  handlingOfQuestions: z.number().min(0).max(30),
+  handlingOfQuestions: z.number().min(0).max(20),
+  modernToolUsage: z.number().min(0).max(5),
+  ethics: z.number().min(0).max(5),
   reportScore: z.number().min(0).max(10),
   externalTotal: z.number().min(0).max(50),
   remarks: z.string().max(500, "Remarks must be less than 500 characters").optional(),
@@ -91,7 +102,9 @@ export default function SupervisorFinalGrading() {
       visuals: 7,
       presentationSkills: 7,
       organization: 7,
-      handlingOfQuestions: 20,
+      handlingOfQuestions: 14,
+      modernToolUsage: 3,
+      ethics: 3,
       reportScore: 7,
       externalTotal: 0,
       remarks: "",
@@ -119,7 +132,9 @@ export default function SupervisorFinalGrading() {
       visuals: my?.visuals ?? 7,
       presentationSkills: my?.presentationSkills ?? 7,
       organization: my?.organization ?? 7,
-      handlingOfQuestions: my?.handlingOfQuestions ?? 20,
+      handlingOfQuestions: clampHandlingOfQuestions(my?.handlingOfQuestions),
+      modernToolUsage: my?.modernToolUsage ?? 3,
+      ethics: my?.ethics ?? 3,
       reportScore: my?.reportScore ?? 7,
       externalTotal: ext,
       remarks: my?.remarks ?? "",
@@ -141,49 +156,14 @@ export default function SupervisorFinalGrading() {
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const blob = await exportFinalGrades();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `final-grades-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({
-        title: "Export Complete",
-        description: "Final grades have been exported to CSV.",
-      });
-    } catch (err) {
-      toast({
-        title: "Export Failed",
-        description: "Failed to export grades. Please try again.",
-        variant: "destructive",
-      });
-    }
+  const getMyContribution = (grade: FinalGrade | undefined) => {
+    if (!grade || !user?.id) return undefined;
+    return grade.internalEvaluations?.find((e) => String(e.evaluatorUser) === String(user.id));
   };
 
-  // Calculate presentation average and internal total
-  const calculateTotals = (data: GradeFormData) => {
-    const presentationAvg = (data.content + data.visuals + data.presentationSkills + data.organization) / 4;
-    const internalTotal = presentationAvg + data.handlingOfQuestions + data.reportScore;
-    const grandTotal = data.externalTotal + internalTotal;
-    return { presentationAvg, internalTotal, grandTotal };
-  };
-
-  // Get grade letter based on total
-  const getGradeLetter = (total: number) => {
-    if (total >= 85) return 'A+';
-    if (total >= 80) return 'A';
-    if (total >= 75) return 'B+';
-    if (total >= 70) return 'B';
-    if (total >= 65) return 'C+';
-    if (total >= 60) return 'C';
-    if (total >= 55) return 'D+';
-    if (total >= 50) return 'D';
-    return 'F';
+  const getMyInternalFromGrade = (grade: FinalGrade | undefined) => {
+    const mine = getMyContribution(grade);
+    return mine ? Number(mine.internalTotal) : null;
   };
 
   const onSubmit = async (data: GradeFormData) => {
@@ -197,6 +177,8 @@ export default function SupervisorFinalGrading() {
         presentationSkills: data.presentationSkills,
         organization: data.organization,
         handlingOfQuestions: data.handlingOfQuestions,
+        modernToolUsage: data.modernToolUsage,
+        ethics: data.ethics,
         reportScore: data.reportScore,
         remarks: data.remarks,
       });
@@ -219,28 +201,30 @@ export default function SupervisorFinalGrading() {
     }
   };
 
-  const ScoreInput = ({ name, label, max, description, disabled }: { name: keyof GradeFormData; label: string; max: number; description?: string; disabled?: boolean }) => (
+  const ExternalScoreInput = () => (
     <FormField
       control={form.control}
-      name={name}
+      name="externalTotal"
       render={({ field }) => (
         <FormItem>
           <div className="flex justify-between items-center">
             <div>
-              <FormLabel>{label}</FormLabel>
-              {description && <p className="text-xs text-muted-foreground">{description}</p>}
+              <FormLabel>Total External Score</FormLabel>
+              <p className="text-xs text-muted-foreground">
+                Sum of 4 monthly evaluations from Industrial Supervisor
+              </p>
             </div>
-            <span className="text-sm font-medium">{field.value as number}/{max}</span>
+            <span className="text-sm font-medium">{field.value as number}/50</span>
           </div>
           <FormControl>
             <Slider
               value={[field.value as number]}
               onValueChange={(value) => field.onChange(value[0])}
               min={0}
-              max={max}
+              max={50}
               step={0.5}
               className="py-2"
-              disabled={disabled}
+              disabled
             />
           </FormControl>
           <FormMessage />
@@ -249,29 +233,7 @@ export default function SupervisorFinalGrading() {
     />
   );
 
-  // Watch form values for live calculation — internal column is the average across all evaluator marks (/50 each)
-  const watchedValues = form.watch();
-  const draftSingleInternal = calculateTotals(watchedValues as GradeFormData).internalTotal;
-  const existingRow = grades.find(
-    (g) => selectedStudent && String(g.studentUser) === String(selectedStudent.id)
-  ) as FinalGrade | undefined;
-  const otherContributions =
-    existingRow?.internalEvaluations?.filter((e) => String(e.evaluatorUser) !== String(user?.id)) ?? [];
-  const evaluatorCount = Math.max(1, otherContributions.length + 1);
-  const internalTotal =
-    otherContributions.reduce((sum, e) => sum + Number(e.internalTotal), 0) + draftSingleInternal;
-  const averagedInternalTotal = internalTotal / evaluatorCount;
-
-  const extShown = watchedValues.externalTotal ?? 0;
-  const grandTotal = extShown + averagedInternalTotal;
-  const currentGrade = getGradeLetter(grandTotal);
-
-  const presentationAvgDisplay =
-    (((watchedValues as GradeFormData).content ?? 0) +
-      ((watchedValues as GradeFormData).visuals ?? 0) +
-      ((watchedValues as GradeFormData).presentationSkills ?? 0) +
-      ((watchedValues as GradeFormData).organization ?? 0)) /
-    4;
+  const watchedValues = form.watch() as GradeFormData;
 
   return (
     <DashboardLayout>
@@ -279,12 +241,6 @@ export default function SupervisorFinalGrading() {
         <PageHeader
           title="Final Grades - Internal Evaluation"
           description="Lists students only after industrial 4‑month marking (50 marks). Panel members and supervisors each grade out of 50 internally; totals use the average so the internal component stays /50."
-          action={
-            <Button onClick={handleExport}>
-              <Download className="h-4 w-4 mr-2" />
-              Export Grades
-            </Button>
-          }
         />
 
         {/* View Grade Dialog */}
@@ -296,23 +252,23 @@ export default function SupervisorFinalGrading() {
               </DialogTitle>
             </DialogHeader>
             {viewingGrade && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg text-sm">
                   <div>
-                    <span className="text-sm font-medium">External Score:</span>
-                    <p className="text-sm text-muted-foreground">{viewingGrade.externalTotal}/50</p>
+                    <span className="font-medium">External total</span>
+                    <p className="text-muted-foreground tabular-nums">{viewingGrade.externalTotal.toFixed(2)}/50</p>
                   </div>
                   <div>
-                    <span className="text-sm font-medium">Internal Total:</span>
-                    <p className="text-sm text-muted-foreground">{viewingGrade.internalTotal.toFixed(2)}/50</p>
+                    <span className="font-medium">Internal averaged</span>
+                    <p className="text-muted-foreground tabular-nums">{viewingGrade.internalTotal.toFixed(2)}/50</p>
                   </div>
                   <div>
-                    <span className="text-sm font-medium">Grand Total:</span>
-                    <p className="text-xl font-bold">{viewingGrade.grandTotal.toFixed(1)}/100</p>
+                    <span className="font-medium">Grand total</span>
+                    <p className="text-lg font-bold tabular-nums">{viewingGrade.grandTotal.toFixed(1)}/100</p>
                   </div>
                   <div>
-                    <span className="text-sm font-medium">Grade:</span>
-                    <Badge className="ml-2" variant={viewingGrade.grandTotal >= 60 ? 'default' : 'destructive'}>
+                    <span className="font-medium">Final grade</span>
+                    <Badge className="mt-1" variant={viewingGrade.grandTotal >= 60 ? "default" : "destructive"}>
                       {viewingGrade.grade}
                     </Badge>
                   </div>
@@ -320,43 +276,21 @@ export default function SupervisorFinalGrading() {
 
                 <Separator />
 
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-foreground">Averaged internal rubrics (after combining evaluators)</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <span>Content:</span><span className="text-right">{viewingGrade.content.toFixed(2)}/10</span>
-                    <span>Visuals:</span><span className="text-right">{viewingGrade.visuals.toFixed(2)}/10</span>
-                    <span>Presentation Skills:</span><span className="text-right">{viewingGrade.presentationSkills.toFixed(2)}/10</span>
-                    <span>Organization:</span><span className="text-right">{viewingGrade.organization.toFixed(2)}/10</span>
-                    <span>Handling of Questions:</span><span className="text-right">{viewingGrade.handlingOfQuestions.toFixed(2)}/30</span>
-                    <span>Report Score:</span><span className="text-right">{viewingGrade.reportScore.toFixed(2)}/10</span>
-                  </div>
-                </div>
-
-                {!!viewingGrade.internalEvaluations?.length && (
-                  <>
-                    <Separator />
-                    <div className="space-y-3">
-                      <h4 className="font-semibold text-foreground">Per-evaluator internal (/50 each)</h4>
-                      <ul className="space-y-2 text-sm">
-                        {viewingGrade.internalEvaluations!.map((row, i) => (
-                          <li key={`${row.evaluatorUser}-${i}`} className="flex justify-between gap-2 border-b border-border/60 pb-2">
-                            <span className="text-muted-foreground">
-                              {row.evaluatorName}
-                              <span className="ml-2 text-xs uppercase">({row.evaluatorRole.replace('_', ' ')})</span>
-                            </span>
-                            <span className="font-medium tabular-nums">{Number(row.internalTotal).toFixed(2)}/50</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </>
-                )}
+                <h4 className="font-semibold text-foreground">Your internal marks</h4>
+                <FinalGradingInternalSummaryCard
+                  internalOutOf50={
+                    getMyInternalFromGrade(viewingGrade) ?? viewingGrade.internalTotal
+                  }
+                />
+                <FinalGradingRubricBreakdown
+                  source={getMyContribution(viewingGrade) ?? viewingGrade}
+                />
 
                 {viewingGrade.remarks && (
                   <>
                     <Separator />
                     <div>
-                      <h4 className="font-semibold text-foreground mb-2">Latest remarks (record)</h4>
+                      <h4 className="font-semibold text-foreground mb-2">Remarks</h4>
                       <p className="text-sm text-muted-foreground">{viewingGrade.remarks}</p>
                     </div>
                   </>
@@ -383,71 +317,29 @@ export default function SupervisorFinalGrading() {
                 {/* External Evaluation Section */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-foreground">External Evaluation (Industrial Supervisor)</h4>
-                  <ScoreInput
-                    name="externalTotal"
-                    label="Total External Score"
-                    max={50}
-                    description="Sum of 4 monthly evaluations from Industrial Supervisor"
-                    disabled={true}
-                  />
+                  <ExternalScoreInput />
                 </div>
 
                 <Separator />
 
-                {/* Presentation Rubrics Section */}
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-foreground">Presentation Rubrics (Internal)</h4>
+                  <h4 className="font-semibold text-foreground">Internal Evaluation</h4>
                   <p className="text-xs text-muted-foreground">
-                    Each evaluator completes this sheet out of 50 internally. Stored totals use the average across all submissions (e.g. 3 panel members → three marks out of 50, averaged to one /50 score).
+                    Enter your marks out of 50 total (presentation, HOQ, modern tool usage, ethics, and report). Same rubric as the evaluation panel.
                   </p>
                   <div className="grid gap-4">
-                    <ScoreInput name="content" label="Content" max={10} description="Material support, engineering terms usage" />
-                    <ScoreInput name="visuals" label="Visuals" max={10} description="Readability, graphics, slide composition" />
-                    <ScoreInput name="presentationSkills" label="Presentation Skills" max={10} description="Clarity, confidence, audience engagement" />
-                    <ScoreInput name="organization" label="Organization" max={10} description="Logical sequence, easy to follow" />
-                    <ScoreInput name="handlingOfQuestions" label="Handling of Questions" max={30} description="Technical depth, research beyond curriculum" />
+                    <FinalGradingScoreInput control={form.control} name="content" rubricKey="content" label="Content" max={10} description="Material support, engineering terms usage" />
+                    <FinalGradingScoreInput control={form.control} name="visuals" rubricKey="visuals" label="Visuals" max={10} description="Readability, graphics, slide composition" />
+                    <FinalGradingScoreInput control={form.control} name="presentationSkills" rubricKey="presentationSkills" label="Presentation Skills" max={10} description="Clarity, confidence, audience engagement" />
+                    <FinalGradingScoreInput control={form.control} name="organization" rubricKey="organization" label="Organization" max={10} description="Logical sequence, easy to follow" />
+                    <FinalGradingScoreInput control={form.control} name="handlingOfQuestions" rubricKey="handlingOfQuestions" label="Handling of Questions" max={20} description="Technical depth, research beyond curriculum" />
+                    <FinalGradingScoreInput control={form.control} name="modernToolUsage" rubricKey="modernToolUsage" label="Modern Tool Usage" max={5} description="Application of technical tools and skills (PLO5)" step={1} />
+                    <FinalGradingScoreInput control={form.control} name="ethics" rubricKey="ethics" label="Ethics" max={5} description="Professional and ethical conduct in the workplace (PLO8)" step={1} />
+                    <FinalGradingScoreInput control={form.control} name="reportScore" rubricKey="reportScore" label="Report Score" max={10} description="Visual format, organization, task details" />
                   </div>
                 </div>
 
-                <Separator />
-
-                {/* Report Section */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-foreground">Report Evaluation</h4>
-                  <ScoreInput
-                    name="reportScore"
-                    label="Report Score"
-                    max={10}
-                    description="Visual format, organization, task details"
-                  />
-                </div>
-
-                {/* Score Summary */}
-                <div className="p-4 bg-muted rounded-lg space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <span>Presentation average (yours):</span>
-                    <span className="text-right font-medium">{presentationAvgDisplay.toFixed(2)}/10</span>
-
-                    <span>Your internal (this sheet):</span>
-                    <span className="text-right font-medium">{draftSingleInternal.toFixed(2)}/50</span>
-
-                    <span>Internal averaged ({evaluatorCount} evaluator{evaluatorCount !== 1 ? 's' : ''}):</span>
-                    <span className="text-right font-medium">{averagedInternalTotal.toFixed(2)}/50</span>
-
-                    <span>External total:</span>
-                    <span className="text-right font-medium">{watchedValues.externalTotal}/50</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold">Grand Total:</span>
-                    <div className="text-right">
-                      <span className="text-xl font-bold">{grandTotal.toFixed(1)}/100</span>
-                      <Badge className="ml-2" variant={grandTotal >= 60 ? 'default' : 'destructive'}>
-                        {currentGrade}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
+                <FinalGradingInternalMarkingSummary marks={watchedValues} />
 
                 <FormField
                   control={form.control}

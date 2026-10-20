@@ -6,8 +6,24 @@ const Company = require('../models/Company');
 const Application = require('../models/Application');
 const Evaluation = require('../models/Evaluation');
 const auth = require('../middleware/auth');
+const { studentSpecializationsFromDoc } = require('../lib/studentSpecializations');
 
 const router = express.Router();
+
+function mergeSpecLabelLists(...lists) {
+  return [...new Set(lists.flat().map((s) => String(s).trim()).filter(Boolean))];
+}
+
+function applySpecializationsToRow(row, extraLabels) {
+  const merged = mergeSpecLabelLists(
+    row.specializations || [],
+    row.specialization ? String(row.specialization).split(';') : [],
+    extraLabels || []
+  );
+  if (merged.length === 0) return;
+  row.specializations = merged;
+  row.specialization = merged.join('; ');
+}
 const TOTAL_MONTHS = 4;
 const TOTAL_WEIGHTAGE = 50;
 const MONTH_WEIGHTAGE = TOTAL_WEIGHTAGE / TOTAL_MONTHS;
@@ -35,6 +51,11 @@ function normalizeCompanyStudent(doc) {
     studentId: s.studentId,
     cgpa: s.cgpa,
     specialization: s.specialization,
+    specializations: Array.isArray(s.specializations) && s.specializations.length > 0
+      ? s.specializations
+      : s.specialization
+        ? String(s.specialization).split(';').map((x) => x.trim()).filter(Boolean)
+        : [],
     applicationCount: s.applicationCount,
     maxApplications: s.maxApplications,
     currentStatus: s.currentStatus,
@@ -79,15 +100,23 @@ router.get('/company/me', auth, async (req, res) => {
     };
 
     const appsByCompany = await Application.find(appQuery)
-      .select('studentUser status industrialSupervisor')
+      .select('studentUser status industrialSupervisor studentSpecializations')
       .populate('industrialSupervisor', 'name email')
       .lean();
 
     const statusByUserId = new Map();
     const industrialByUserId = new Map();
+    const specsByUserId = new Map();
     for (const app of appsByCompany) {
       const uid = String(app.studentUser || '');
       if (!uid) continue;
+
+      const appSpecs = Array.isArray(app.studentSpecializations)
+        ? app.studentSpecializations.map((s) => String(s).trim()).filter(Boolean)
+        : [];
+      if (appSpecs.length > 0) {
+        specsByUserId.set(uid, mergeSpecLabelLists(specsByUserId.get(uid) || [], appSpecs));
+      }
 
       if (app.industrialSupervisor) {
         const isPopulated = typeof app.industrialSupervisor === 'object' && app.industrialSupervisor !== null;
@@ -153,6 +182,7 @@ router.get('/company/me', auth, async (req, res) => {
       for (const u of users) {
         const uid = String(u._id);
         const appStatus = statusByUserId.get(uid) || 'shortlisted';
+        const fallbackSpecs = specsByUserId.get(uid) || [];
         rowsByUserId.set(uid, {
           id: uid,
           name: u.name || '',
@@ -161,7 +191,8 @@ router.get('/company/me', auth, async (req, res) => {
           department: u.department,
           studentId: u.studentId || '',
           cgpa: typeof u.cgpa === 'number' ? u.cgpa : 0,
-          specialization: '',
+          specialization: fallbackSpecs.join('; '),
+          specializations: fallbackSpecs,
           applicationCount: 0,
           maxApplications: 2,
           currentStatus: appStatus,
@@ -205,6 +236,13 @@ router.get('/company/me', auth, async (req, res) => {
       if (industrial) {
         row.industrialSupervisorId = industrial.id;
         row.industrialSupervisorName = industrial.name;
+      }
+
+      const appSpecs = specsByUserId.get(uid);
+      if (appSpecs?.length) {
+        applySpecializationsToRow(row, appSpecs);
+      } else if (!row.specializations?.length && row.specialization) {
+        applySpecializationsToRow(row, studentSpecializationsFromDoc({ specialization: row.specialization }));
       }
     }
 

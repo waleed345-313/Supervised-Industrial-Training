@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const Company = require('../models/Company');
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -74,6 +75,11 @@ router.post('/login', [
             studentId: responseUser.studentId || student.studentId,
             cgpa: typeof responseUser.cgpa === 'number' ? responseUser.cgpa : student.cgpa,
             specialization: student.specialization,
+            specializations: Array.isArray(student.specializations) && student.specializations.length > 0
+              ? student.specializations
+              : student.specialization
+                ? String(student.specialization).split(';').map((s) => s.trim()).filter(Boolean)
+                : [],
             applicationCount: student.applicationCount,
             maxApplications: student.maxApplications,
             currentStatus: student.currentStatus,
@@ -106,6 +112,41 @@ router.post('/login', [
   }
 });
 
+// @route   POST /api/auth/change-password
+// @desc    Change password for the authenticated user
+router.post('/change-password', auth, [
+  body('currentPassword', 'Current password is required').exists(),
+  body('newPassword', 'New password must be at least 6 characters').isLength({ min: 6 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ msg: 'Current password is incorrect' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.json({ msg: 'Password updated successfully' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
 // @route   POST /api/auth/register
 // @desc    Register a user
 router.post('/register', [
@@ -122,6 +163,14 @@ router.post('/register', [
   const { name, email, password, role, department, companyId, username, studentId, cgpa, batch, section, gender } = req.body;
 
   try {
+    let normalizedCgpa = cgpa;
+    if (role === 'student' && cgpa != null && cgpa !== '') {
+      const n = Number(cgpa);
+      if (!Number.isFinite(n) || n < 0 || n > 4) {
+        return res.status(400).json({ msg: 'CGPA must be between 0 and 4' });
+      }
+      normalizedCgpa = n;
+    }
     const needsCompany = role === 'company_focal' || role === 'industrial_supervisor';
     if (needsCompany) {
       if (!companyId || !mongoose.Types.ObjectId.isValid(companyId)) {
@@ -147,7 +196,7 @@ router.post('/register', [
       companyId: needsCompany ? companyId : undefined,
       username,
       studentId,
-      cgpa,
+      cgpa: normalizedCgpa,
       batch,
       section,
       gender,

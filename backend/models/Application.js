@@ -14,6 +14,8 @@ const applicationSchema = new mongoose.Schema({
     default: 'pending'
   },
   appliedDate: { type: Date, default: Date.now },
+  /** Specializations the student selected from this internship's target list */
+  studentSpecializations: [{ type: String }],
   remarks: String,
   seatCounted: { type: Boolean, default: false },
   /** Routed by Placement Manager — does not consume the student's 2 priority application slots */

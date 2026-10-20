@@ -1,37 +1,34 @@
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { User, Mail, Lock } from 'lucide-react';
+import { User, Mail } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import api from '@/lib/api';
+import { useChangePassword } from '@/hooks/use-change-password';
+import { ChangePasswordFields } from '@/components/profile/ChangePasswordFields';
+import { CnicNumberField, cnicFieldRemountKey } from '@/components/profile/CnicNumberField';
+import { cnicNumberSchema } from '@/lib/cnic';
 
 export default function IndustrialSupervisorProfile() {
-  const { user } = useAuth();
+  const { user, refreshSessionUser } = useAuth();
+  const [formRevision, setFormRevision] = useState(0);
   const { toast } = useToast();
+  const password = useChangePassword();
 
   const profileSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     email: z.string().email('Invalid email address'),
-    cnicNumber: z
-      .string()
-      .optional()
-      .refine(
-        (val) => !val || /^\d{5}-\d{7}-\d$/.test(val),
-        {
-          message: 'CNIC must be in format 12345-1234567-1',
-        }
-      ),
+    cnicNumber: cnicNumberSchema,
   });
 
   type ProfileFormData = z.infer<typeof profileSchema>;
@@ -49,6 +46,9 @@ export default function IndustrialSupervisorProfile() {
   const handleSave = async (data: ProfileFormData) => {
     if (!user) return;
 
+    const pwOk = await password.submitPasswordChange();
+    if (!pwOk) return;
+
     try {
       const updatedName = `${data.firstName} ${data.lastName}`.trim();
 
@@ -58,10 +58,13 @@ export default function IndustrialSupervisorProfile() {
         cnicNumber: data.cnicNumber,
       });
 
+      await refreshSessionUser();
+
       toast({
         title: 'Profile Updated',
         description: 'Your profile changes have been saved successfully.',
       });
+      setFormRevision((n) => n + 1);
     } catch (error) {
       console.error('Error updating profile', error);
       toast({
@@ -171,60 +174,25 @@ export default function IndustrialSupervisorProfile() {
                     control={form.control}
                     name="cnicNumber"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>CNIC Number</FormLabel>
-                        <FormControl>
-                          <Input placeholder="12345-1234567-1" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <CnicNumberField
+                        key={cnicFieldRemountKey(user.cnicNumber, formRevision)}
+                        field={field}
+                        savedCnic={user.cnicNumber}
+                      />
                     )}
                   />
 
-                  <Separator />
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Change Password</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword">Current Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="currentPassword"
-                      type="password"
-                      className="pl-10"
-                      placeholder="Enter current password"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword">New Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      className="pl-10"
-                      placeholder="Enter new password"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      className="pl-10"
-                      placeholder="Confirm new password"
-                    />
-                  </div>
-                </div>
-              </div>
+                  <ChangePasswordFields {...password} />
 
                   <div className="flex justify-end gap-4">
-                    <Button variant="outline" type="button" onClick={() => form.reset()}>
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={() => {
+                        form.reset();
+                        password.resetPasswordFields();
+                        setFormRevision((n) => n + 1);
+                      }}>
                       Cancel
                     </Button>
                     <Button type="submit">Save Changes</Button>

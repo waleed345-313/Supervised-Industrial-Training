@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type Ref } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,11 +58,78 @@ const userFormSchema = z.object({
       path: ['companyId'],
     });
   }
+
+  if (data.role === 'student' && data.cgpa && String(data.cgpa).trim()) {
+    const n = parseFloat(String(data.cgpa));
+    if (Number.isNaN(n) || n < 0 || n > 4) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'CGPA must be between 0 and 4',
+        path: ['cgpa'],
+      });
+    }
+  }
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
 
 type RegisteredCompanyOption = { id: string; name: string };
+
+function CgpaFormInput({
+  value,
+  onChange,
+  onBlur,
+  name,
+  ref,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  name: string;
+  ref: Ref<HTMLInputElement>;
+}) {
+  return (
+    <Input
+      ref={ref}
+      name={name}
+      type="number"
+      step="0.01"
+      min={0}
+      max={4}
+      placeholder="0.00 – 4.00"
+      value={value}
+      onKeyDown={(e) => {
+        if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
+      }}
+      onChange={(e) => {
+        let next = e.target.value.replace(/^-+/, '');
+        if (next !== '') {
+          const n = parseFloat(next);
+          if (!Number.isNaN(n)) {
+            if (n < 0) next = '0';
+            else if (n > 4) next = '4';
+          }
+        }
+        onChange(next);
+      }}
+      onBlur={() => {
+        const trimmed = String(value).trim();
+        if (trimmed === '') {
+          onChange('');
+          onBlur();
+          return;
+        }
+        const n = parseFloat(trimmed);
+        if (Number.isNaN(n)) {
+          onChange('');
+        } else {
+          onChange(String(Math.min(4, Math.max(0, n))));
+        }
+        onBlur();
+      }}
+    />
+  );
+}
 
 const STORAGE_KEY = 'sit_portal_users';
 
@@ -776,7 +843,13 @@ export default function AdminUsers() {
                         <FormItem>
                           <FormLabel>CGPA</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" placeholder="e.g. 3.50" {...field} />
+                            <CgpaFormInput
+                              name={field.name}
+                              ref={field.ref}
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              onBlur={field.onBlur}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -1009,7 +1082,13 @@ export default function AdminUsers() {
                         <FormItem>
                           <FormLabel>CGPA</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" placeholder="e.g. 3.50" {...field} />
+                            <CgpaFormInput
+                              name={field.name}
+                              ref={field.ref}
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              onBlur={field.onBlur}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

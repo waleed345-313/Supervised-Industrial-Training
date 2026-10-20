@@ -40,6 +40,8 @@ export interface Student extends User {
   studentId: string;
   cgpa: number;
   specialization: string;
+  /** One or more domains selected when applying (union across applications). */
+  specializations?: string[];
   applicationCount: number;
   maxApplications: number;
   currentStatus: 'not_applied' | 'applied' | 'shortlisted' | 'allocated' | 'rejected' | 'completed';
@@ -116,6 +118,8 @@ export interface Application {
   appliedDate: string;
   remarks?: string;
   studentCGPA?: string;
+  /** Specializations chosen by the student from this internship's target list */
+  studentSpecializations?: string[];
   /** Placement Office replacement routing — shown to company focal as a labeled application */
   isReplacement?: boolean;
 }

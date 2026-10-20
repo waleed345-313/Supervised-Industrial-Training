@@ -3,8 +3,9 @@ const mongoose = require('mongoose');
 const studentSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   studentId: { type: String, required: true, unique: true },
-  cgpa: { type: Number, required: true },
+  cgpa: { type: Number, required: true, min: 0, max: 4 },
   specialization: { type: String, required: true },
+  specializations: [{ type: String }],
   applicationCount: { type: Number, default: 0 },
   maxApplications: { type: Number, default: 2 },
   currentStatus: {

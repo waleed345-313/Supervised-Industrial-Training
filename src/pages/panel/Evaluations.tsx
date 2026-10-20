@@ -11,6 +11,9 @@ import { useState } from 'react';
 import { Student, Evaluation } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import {
+  gradeBadgeVariant,
+  internalMarksToPercent,
+  letterGradeFromInternalOutOf50,
   panelMemberHasMarkedStudent,
   studentsEligibleForPanelFinalGrading,
   type PanelFinalGradeLike,
@@ -61,27 +64,28 @@ export default function PanelEvaluations() {
                 <TableRow>
                   <TableHead>Student</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>Your Internal (/50)</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Internal (/50)</TableHead>
+                  <TableHead>%</TableHead>
+                  <TableHead>Grade</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-destructive py-8">
+                    <TableCell colSpan={7} className="text-center text-destructive py-8">
                       Could not load students. Please refresh the page.
                     </TableCell>
                   </TableRow>
                 ) : completedStudents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       No completed evaluations yet. Submit final grades from the Final Grading page.
                     </TableCell>
                   </TableRow>
@@ -93,18 +97,29 @@ export default function PanelEvaluations() {
                     const myInternal = finalGrade?.internalEvaluations?.find(
                       (e) => String(e.evaluatorUser) === String(user?.id)
                     )?.internalTotal;
+                    const letter =
+                      typeof myInternal === 'number'
+                        ? letterGradeFromInternalOutOf50(myInternal)
+                        : null;
+                    const pct =
+                      typeof myInternal === 'number' ? internalMarksToPercent(myInternal) : null;
 
                     return (
                       <TableRow key={student.id}>
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell className="text-muted-foreground">{student.allocatedCompany || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="tabular-nums">
-                            {typeof myInternal === 'number' ? `${myInternal.toFixed(2)}/50` : '—'}
-                          </Badge>
+                        <TableCell className="tabular-nums">
+                          {typeof myInternal === 'number' ? myInternal.toFixed(2) : '—'}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {pct !== null ? `${pct.toFixed(1)}%` : '—'}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="default">Done</Badge>
+                          {letter ? (
+                            <Badge variant={gradeBadgeVariant(letter)}>{letter}</Badge>
+                          ) : (
+                            '—'
+                          )}
                         </TableCell>
                         <TableCell>
                           <Button variant="outline" size="sm" onClick={() => handleViewEvaluation(student)}>
@@ -169,7 +184,16 @@ export default function PanelEvaluations() {
                             const mi = fg?.internalEvaluations?.find(
                               (e) => String(e.evaluatorUser) === String(user?.id)
                             )?.internalTotal;
-                            return typeof mi === 'number' ? `${mi.toFixed(2)}/50` : '—';
+                            if (typeof mi !== 'number') return <span>—</span>;
+                            const pct = internalMarksToPercent(mi);
+                            const letter = letterGradeFromInternalOutOf50(mi);
+                            return (
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="text-2xl font-bold text-primary tabular-nums">{mi.toFixed(2)}/50</span>
+                                <span className="text-sm text-muted-foreground tabular-nums">{pct.toFixed(1)}%</span>
+                                <Badge variant={gradeBadgeVariant(letter)}>{letter}</Badge>
+                              </div>
+                            );
                           })()}
                         </div>
                       </div>

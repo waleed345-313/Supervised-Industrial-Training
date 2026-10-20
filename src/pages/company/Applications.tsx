@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { FileText, Eye, CheckCircle, XCircle, User, GraduationCap, Calendar, MapPin, Download } from 'lucide-react';
@@ -184,6 +185,7 @@ export default function CompanyApplications() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Student</TableHead>
+                    <TableHead>Specialization(s)</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Applied Date</TableHead>
                     <TableHead>Status</TableHead>
@@ -202,6 +204,19 @@ export default function CompanyApplications() {
                             </span>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="max-w-[220px]">
+                        {(application.studentSpecializations?.length ?? 0) > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {application.studentSpecializations!.map((spec) => (
+                              <Badge key={spec} variant="secondary" className="text-xs font-normal">
+                                {spec}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{application.internshipTitle}</TableCell>
                       <TableCell className="text-muted-foreground">{application.appliedDate}</TableCell>
@@ -259,6 +274,20 @@ export default function CompanyApplications() {
                       </div>
                     )}
                   </div>
+                  {(selectedApplication.studentSpecializations?.length ?? 0) > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Selected specialization(s)
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedApplication.studentSpecializations!.map((spec) => (
+                          <Badge key={spec} variant="secondary" className="text-xs font-normal">
+                            {spec}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3">

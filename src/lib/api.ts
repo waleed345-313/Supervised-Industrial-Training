@@ -213,6 +213,8 @@ export async function submitFinalGrade(data: {
   presentationSkills: number;
   organization: number;
   handlingOfQuestions: number;
+  modernToolUsage: number;
+  ethics: number;
   reportScore: number;
   remarks?: string;
 }) {
@@ -220,19 +222,6 @@ export async function submitFinalGrade(data: {
     method: 'POST',
     body: JSON.stringify(data),
   });
-}
-
-export async function exportFinalGrades() {
-  const token = localStorage.getItem('sit_portal_token');
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-  
-  const res = await fetch(`${API_BASE}/api/supervisor/final-grades/export`, { headers });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(t || res.statusText);
-  }
-  return res.blob();
 }
 
 export async function getSupervisorFeedback() {
@@ -249,10 +238,6 @@ export async function getPanelEvaluations() {
 
 export async function getPanelFinalGrades() {
   return request('/api/panel/final-grades');
-}
-
-export async function getPanelProgressReports() {
-  return request('/api/panel/progress-reports');
 }
 
 export async function submitPanelFinalGrade(data: {
@@ -293,6 +278,19 @@ export async function getFocalFinalGrading() {
   return request('/api/focal/final-grading');
 }
 
+export async function getFocalObeSheetExport(params?: {
+  title?: string;
+  instructor?: string;
+  semester?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.title) q.set('title', params.title);
+  if (params?.instructor) q.set('instructor', params.instructor);
+  if (params?.semester) q.set('semester', params.semester);
+  const qs = q.toString();
+  return request(`/api/focal/final-grading/obe-sheet${qs ? `?${qs}` : ''}`);
+}
+
 async function request(path: string, options: RequestInit = {}) {
   const url = `${API_BASE}${path}`;
   const headers: Record<string, string> = {
@@ -320,6 +318,13 @@ export async function login(email: string, password: string) {
 
 export async function register(data: any) {
   return request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function changePassword(data: { currentPassword: string; newPassword: string }) {
+  return request('/api/auth/change-password', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -654,7 +659,8 @@ export async function getApplicationDocuments(applicationId: string) {
 
 export default { 
   login, 
-  register, 
+  register,
+  changePassword,
   getUsers, 
   getUserById, 
   createUser,

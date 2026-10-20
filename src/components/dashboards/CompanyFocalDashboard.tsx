@@ -112,6 +112,15 @@ export function CompanyFocalDashboard() {
     setSelectedInternship(null);
   };
 
+  const handleViewDocument = async (doc: Document) => {
+    try {
+      await api.openDocumentInNewTab(doc.id);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Could not open file';
+      toast({ title: 'View failed', description: msg.slice(0, 200), variant: 'destructive' });
+    }
+  };
+
   const classifyDocumentCategory = (doc: Document): 'Attendance' | 'Completion' | 'Acceptance' | 'CV' | 'Other' => {
     if (doc.type === 'attendance_sheet') return 'Attendance';
     if (doc.type === 'acceptance_letter') return 'Acceptance';
@@ -267,7 +276,12 @@ export function CompanyFocalDashboard() {
                             <TableCell className="font-medium">{doc.name}</TableCell>
                             <TableCell className="text-muted-foreground">{doc.uploadedDate}</TableCell>
                             <TableCell>
-                              <Button variant="outline" size="sm" onClick={() => window.open(doc.url, '_blank')}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                type="button"
+                                onClick={() => handleViewDocument(doc)}
+                              >
                                 View
                               </Button>
                             </TableCell>

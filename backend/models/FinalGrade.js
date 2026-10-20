@@ -23,7 +23,7 @@ const finalGradeSchema = new mongoose.Schema({
       visuals: { type: Number, required: true, min: 0, max: 10 },
       presentationSkills: { type: Number, required: true, min: 0, max: 10 },
       organization: { type: Number, required: true, min: 0, max: 10 },
-      handlingOfQuestions: { type: Number, required: true, min: 0, max: 30 },
+      handlingOfQuestions: { type: Number, required: true, min: 0, max: 20 },
       modernToolUsage: { type: Number, min: 0, max: 5, default: 0 },
       ethics: { type: Number, min: 0, max: 5, default: 0 },
       reportScore: { type: Number, required: true, min: 0, max: 10 },
@@ -39,7 +39,7 @@ const finalGradeSchema = new mongoose.Schema({
   visuals: { type: Number, required: true, min: 0, max: 10 },
   presentationSkills: { type: Number, required: true, min: 0, max: 10 },
   organization: { type: Number, required: true, min: 0, max: 10 },
-  handlingOfQuestions: { type: Number, required: true, min: 0, max: 30 },
+  handlingOfQuestions: { type: Number, required: true, min: 0, max: 20 },
   modernToolUsage: { type: Number, min: 0, max: 5, default: 0 },
   ethics: { type: Number, min: 0, max: 5, default: 0 },
 

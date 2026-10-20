@@ -706,8 +706,31 @@ router.post('/final-grades', auth, async (req, res) => {
       return res.status(403).json({ msg: 'Not allowed' });
     }
 
-    const { studentId, content, visuals, presentationSkills, organization, handlingOfQuestions, reportScore, remarks } =
-      req.body;
+    const {
+      studentId,
+      content,
+      visuals,
+      presentationSkills,
+      organization,
+      handlingOfQuestions,
+      modernToolUsage,
+      ethics,
+      reportScore,
+      remarks,
+    } = req.body;
+
+    const hoq = Number(handlingOfQuestions);
+    const modern = Number(modernToolUsage);
+    const ethicsScore = Number(ethics);
+    if (!Number.isFinite(hoq) || hoq < 0 || hoq > 20) {
+      return res.status(400).json({ msg: 'Handling of Questions must be between 0 and 20.' });
+    }
+    if (!Number.isFinite(modern) || modern < 0 || modern > 5) {
+      return res.status(400).json({ msg: 'Modern Tool Usage must be between 0 and 5.' });
+    }
+    if (!Number.isFinite(ethicsScore) || ethicsScore < 0 || ethicsScore > 5) {
+      return res.status(400).json({ msg: 'Ethics must be between 0 and 5.' });
+    }
 
     if (!(await hasAllocatedInternship(studentId))) {
       return res.status(403).json({ msg: 'Student not allocated or not found' });
@@ -746,7 +769,16 @@ router.post('/final-grades', auth, async (req, res) => {
       evaluatorUserId: req.user.id,
       evaluatorName: user.name,
       evaluatorRole: 'academic_supervisor',
-      marks: { content, visuals, presentationSkills, organization, handlingOfQuestions, reportScore },
+      marks: {
+        content,
+        visuals,
+        presentationSkills,
+        organization,
+        handlingOfQuestions: hoq,
+        modernToolUsage: modern,
+        ethics: ethicsScore,
+        reportScore,
+      },
       remarks,
       industrialStats: industrial,
     });
@@ -762,70 +794,6 @@ router.post('/final-grades', auth, async (req, res) => {
     const cid = await getStudentAllocatedCompanyId(studentId);
     const statsOut = await getIndustrialMarkingStats(studentId, cid);
     res.json(serializeFinalGrade(finalGrade, statsOut));
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
-  }
-});
-
-// @route   GET /api/supervisor/final-grades/export
-// @desc    Export all final grades for supervisor's students as CSV
-router.get('/final-grades/export', auth, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user || user.role !== 'academic_supervisor') {
-      return res.status(403).json({ msg: 'Not allowed' });
-    }
-
-    const oidList = await collectInternshipAllocatedUserIds();
-    const scopeUserIds = oidList.map((id) => String(id));
-
-    const users = await User.find({ _id: { $in: oidList }, role: 'student' }).select('name studentId');
-    const students = await Student.find({ user: { $in: oidList } })
-      .populate('user')
-      .populate('allocatedCompany', 'name');
-
-    const grades = await FinalGrade.find({
-      studentUser: { $in: scopeUserIds },
-    });
-
-    // Create CSV header
-    const csvHeader =
-      'Student Name,Student ID,Company,External (50),Internal evaluators,Avg Content (10),Avg Visuals (10),Avg Presentation Skills (10),Avg Organization (10),Avg Handling Questions (30),Avg Report (10),Internal Total avg (50),Grand Total (100),Grade,Remarks\n';
-
-    const studentRowByUser = new Map(students.map((s) => [String(s.user._id || s.user), s]));
-
-    // Create CSV rows
-    const csvRows = [];
-    for (const u of users) {
-      const uid = String(u._id);
-      const student = studentRowByUser.get(uid);
-      const grade = grades.find((g) => String(g.studentUser) === uid);
-      const companyName = student?.allocatedCompany?.name || 'N/A';
-      const sid = student?.studentId || u.studentId || '';
-
-      if (!grade) {
-        csvRows.push(`${u.name || ''},${sid},${companyName},Not Graded,,,,,,,,,,`);
-        continue;
-      }
-
-      const cid = await getStudentAllocatedCompanyId(uid);
-      const stats = await getIndustrialMarkingStats(uid, cid);
-      const serialized = serializeFinalGrade(grade, stats);
-      const contrib = serialized.contributorCount || '';
-
-      csvRows.push(
-        `${serialized.studentName},${sid},${companyName},${serialized.externalTotal},${contrib},${serialized.content?.toFixed(2)},${serialized.visuals?.toFixed(2)},${serialized.presentationSkills?.toFixed(2)},${serialized.organization?.toFixed(2)},${serialized.handlingOfQuestions?.toFixed(2)},${serialized.reportScore?.toFixed(2)},${serialized.internalTotal.toFixed(2)},${serialized.grandTotal.toFixed(2)},${serialized.grade},"${(grade.remarks || '').replace(/"/g, '""')}"`
-      );
-    }
-
-    const csvJoined = csvRows.join('\n');
-    
-    const csv = csvHeader + csvJoined;
-    
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="final-grades-${Date.now()}.csv"`);
-    res.send(csv);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');

@@ -22,6 +22,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import api, { API_BASE } from '@/lib/api';
 import { mapInternshipFromApi } from '@/lib/internshipMap';
 import { io, type Socket } from 'socket.io-client';
+import {
+  SPECIALIZATION_OPTIONS,
+  labelsToSpecIds,
+  specIdsToLabels,
+} from '@/data/specializations';
 
 const internshipSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters").max(100, "Title must be less than 100 characters"),
@@ -37,31 +42,7 @@ const internshipSchema = z.object({
 
 type InternshipFormData = z.infer<typeof internshipSchema>;
 
-const specializationOptions = [
-  { id: 'cp', label: 'Computer Programming/ Software Development' },
-  { id: 'db', label: 'Database Management/ Administration/ Programming' },
-  { id: 'na', label: 'Network Administration/ Programming/ Management' },
-  { id: 'wp', label: 'Web Programming/ Development/ E-Commerce' },
-  { id: 'ai', label: 'Artificial intelligence/ Data Science/ Machine Learning' },
-  { id: 'ip', label: 'Image Processing/ Game Programming/ Image Analysis' },
-  { id: 'ma', label: 'Mobile App Development/ Programming/ Management/ Troubleshooting' },
-  { id: 'cs', label: 'Cyber Security/ Digital Forensics/ Network Security' },
-  { id: 'ux', label: 'User Interface/ User Experience Design/ Development' },
-  { id: 'qa', label: 'Software Quality Assurance' },
-  { id: 'hw', label: 'Hardware/ System Programming/ Computer Architecture/ OS' },
-  { id: 'ot', label: 'Any other domain related to information engineering technology' },
-];
-
 const durations = ['16 weeks', '32 weeks'];
-
-function specIdsToLabels(ids: string[]): string[] {
-  return ids.map((id) => specializationOptions.find((s) => s.id === id)?.label || id);
-}
-
-function labelsToSpecIds(labels: string[]): string[] {
-  return labels.map((label) => specializationOptions.find((s) => s.label === label)?.id || label);
-}
-
 
 export default function CompanyInternships() {
   const { user } = useAuth();
@@ -337,7 +318,7 @@ export default function CompanyInternships() {
                     <FormItem>
                       <FormLabel>Target Specializations</FormLabel>
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        {specializationOptions.map((spec) => (
+                        {SPECIALIZATION_OPTIONS.map((spec) => (
                           <FormField
                             key={spec.id}
                             control={form.control}

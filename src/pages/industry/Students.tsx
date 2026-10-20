@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Student } from '@/types';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { StudentSpecializationsDisplay } from '@/components/shared/StudentSpecializationsDisplay';
 
 function getCompanyName(company: unknown): string {
   if (!company) return '—';
@@ -110,7 +111,9 @@ export default function IndustryStudents() {
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell className="text-muted-foreground">{student.studentId}</TableCell>
                         <TableCell className="text-muted-foreground">{getCompanyName(student.allocatedCompany)}</TableCell>
-                        <TableCell className="text-muted-foreground">{student.specialization}</TableCell>
+                        <TableCell>
+                          <StudentSpecializationsDisplay student={student} />
+                        </TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
@@ -159,8 +162,13 @@ export default function IndustryStudents() {
                                         <p className="text-sm text-muted-foreground">{selectedStudent.cgpa}/4.0</p>
                                       </div>
                                       <div>
-                                        <span className="text-sm font-medium">Specialization:</span>
-                                        <p className="text-sm text-muted-foreground">{selectedStudent.specialization}</p>
+                                        <span className="text-sm font-medium">Specialization(s):</span>
+                                        <div className="mt-1">
+                                          <StudentSpecializationsDisplay
+                                            student={selectedStudent}
+                                            maxWidth="max-w-full"
+                                          />
+                                        </div>
                                       </div>
                                       <div>
                                         <span className="text-sm font-medium">Department:</span>

@@ -1,21 +1,37 @@
-const { aggregateFromContributions, letterGrade } = require('./finalGradeAggregate');
+const {
+  aggregateFromContributions,
+  contributorInternalTotal,
+  letterGrade,
+  presentationAvg,
+} = require('./finalGradeAggregate');
+
+const HANDLING_OF_QUESTIONS_MAX = 20;
+
+function clampHoq(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(HANDLING_OF_QUESTIONS_MAX, Math.max(0, n));
+}
 
 function toPlainContribution(e) {
   if (!e) return null;
-  return {
-    evaluatorUser: e.evaluatorUser ? String(e.evaluatorUser) : undefined,
-    evaluatorName: e.evaluatorName || '',
-    evaluatorRole: e.evaluatorRole || 'academic_supervisor',
+  const marks = {
     content: Number(e.content),
     visuals: Number(e.visuals),
     presentationSkills: Number(e.presentationSkills),
     organization: Number(e.organization),
-    handlingOfQuestions: Number(e.handlingOfQuestions),
+    handlingOfQuestions: clampHoq(e.handlingOfQuestions),
     modernToolUsage: Number(e.modernToolUsage) || 0,
     ethics: Number(e.ethics) || 0,
     reportScore: Number(e.reportScore),
-    presentationAvg: Number(e.presentationAvg),
-    internalTotal: Number(e.internalTotal),
+  };
+  return {
+    evaluatorUser: e.evaluatorUser ? String(e.evaluatorUser) : undefined,
+    evaluatorName: e.evaluatorName || '',
+    evaluatorRole: e.evaluatorRole || 'academic_supervisor',
+    ...marks,
+    presentationAvg: presentationAvg(marks),
+    internalTotal: contributorInternalTotal(marks),
     remarks: e.remarks || '',
     submittedAt: e.submittedAt,
   };
@@ -49,7 +65,7 @@ function getContributionList(doc) {
         visuals: Number(doc.visuals),
         presentationSkills: Number(doc.presentationSkills),
         organization: Number(doc.organization),
-        handlingOfQuestions: Number(doc.handlingOfQuestions),
+        handlingOfQuestions: clampHoq(doc.handlingOfQuestions),
         modernToolUsage: Number(doc.modernToolUsage) || 0,
         ethics: Number(doc.ethics) || 0,
         reportScore: Number(doc.reportScore),
@@ -83,7 +99,9 @@ function serializeFinalGrade(doc, industrialStats) {
     visuals: agg.contributorCount ? agg.visuals : plain.visuals,
     presentationSkills: agg.contributorCount ? agg.presentationSkills : plain.presentationSkills,
     organization: agg.contributorCount ? agg.organization : plain.organization,
-    handlingOfQuestions: agg.contributorCount ? agg.handlingOfQuestions : plain.handlingOfQuestions,
+    handlingOfQuestions: clampHoq(
+      agg.contributorCount ? agg.handlingOfQuestions : plain.handlingOfQuestions
+    ),
     modernToolUsage: agg.contributorCount ? agg.modernToolUsage : plain.modernToolUsage ?? 0,
     ethics: agg.contributorCount ? agg.ethics : plain.ethics ?? 0,
     reportScore: agg.contributorCount ? agg.reportScore : plain.reportScore,

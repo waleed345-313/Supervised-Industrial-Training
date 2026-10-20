@@ -2,12 +2,20 @@ function presentationAvg({ content, visuals, presentationSkills, organization })
   return (content + visuals + presentationSkills + organization) / 4;
 }
 
+const HANDLING_OF_QUESTIONS_MAX = 20;
+
+function clampHoq(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(HANDLING_OF_QUESTIONS_MAX, Math.max(0, n));
+}
+
 function contributorInternalTotal(fields) {
   const modernToolUsage = Number(fields.modernToolUsage) || 0;
   const ethics = Number(fields.ethics) || 0;
   return (
     presentationAvg(fields) +
-    fields.handlingOfQuestions +
+    clampHoq(fields.handlingOfQuestions) +
     fields.reportScore +
     modernToolUsage +
     ethics

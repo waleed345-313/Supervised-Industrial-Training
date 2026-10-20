@@ -8,6 +8,14 @@ const {
   letterGrade,
 } = require('./finalGradeAggregate');
 
+const HANDLING_OF_QUESTIONS_MAX = 20;
+
+function clampHoq(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(HANDLING_OF_QUESTIONS_MAX, Math.max(0, n));
+}
+
 function toSubdoc(contribution) {
   return {
     evaluatorUser:
@@ -46,20 +54,24 @@ async function upsertInternalFinalContribution({
   remarks,
   industrialStats,
 }) {
-  const presAvg = presentationAvg(marks);
-  const contribInternal = contributorInternalTotal(marks);
+  const normalizedMarks = {
+    ...marks,
+    handlingOfQuestions: clampHoq(marks.handlingOfQuestions),
+  };
+  const presAvg = presentationAvg(normalizedMarks);
+  const contribInternal = contributorInternalTotal(normalizedMarks);
   const contribution = {
     evaluatorUser: evaluatorUserId,
     evaluatorName,
     evaluatorRole,
-    content: marks.content,
-    visuals: marks.visuals,
-    presentationSkills: marks.presentationSkills,
-    organization: marks.organization,
-    handlingOfQuestions: marks.handlingOfQuestions,
-    modernToolUsage: Number(marks.modernToolUsage) || 0,
-    ethics: Number(marks.ethics) || 0,
-    reportScore: marks.reportScore,
+    content: normalizedMarks.content,
+    visuals: normalizedMarks.visuals,
+    presentationSkills: normalizedMarks.presentationSkills,
+    organization: normalizedMarks.organization,
+    handlingOfQuestions: normalizedMarks.handlingOfQuestions,
+    modernToolUsage: Number(normalizedMarks.modernToolUsage) || 0,
+    ethics: Number(normalizedMarks.ethics) || 0,
+    reportScore: normalizedMarks.reportScore,
     presentationAvg: presAvg,
     internalTotal: contribInternal,
     remarks: remarks || '',

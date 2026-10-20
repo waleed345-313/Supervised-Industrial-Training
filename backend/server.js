@@ -18,12 +18,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Local MongoDB — same URI in .env as in MongoDB Compass (mongodb://localhost:27017/...).
-const mongoUri =
-  process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/test';
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+if (!mongoUri) {
+  console.error('Missing MONGODB_URI (or MONGO_URI) in environment.');
+  process.exit(1);
+}
 mongoose
   .connect(mongoUri)
-  .then(() => console.log('MongoDB connected (local)'))
+  .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection failed:', err.message));
 
 // Routes

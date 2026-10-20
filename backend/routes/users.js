@@ -47,6 +47,11 @@ router.get('/:id', async (req, res) => {
             studentId: student.studentId,
             cgpa: student.cgpa,
             specialization: student.specialization,
+            specializations: Array.isArray(student.specializations) && student.specializations.length > 0
+              ? student.specializations
+              : student.specialization
+                ? String(student.specialization).split(';').map((s) => s.trim()).filter(Boolean)
+                : [],
             applicationCount: student.applicationCount,
             maxApplications: student.maxApplications,
             currentStatus: student.currentStatus,
@@ -76,6 +81,14 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const update = { ...req.body };
+
+    if (update.cgpa != null && update.cgpa !== '') {
+      const n = Number(update.cgpa);
+      if (!Number.isFinite(n) || n < 0 || n > 4) {
+        return res.status(400).json({ msg: 'CGPA must be between 0 and 4' });
+      }
+      update.cgpa = n;
+    }
 
     if (typeof update.role === 'string' && !['company_focal', 'industrial_supervisor'].includes(update.role)) {
       update.companyId = null;
