@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { MessageSquare, Send, User as UserIcon, Plus, Search, Clock, Paperclip, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import api from '@/lib/api';
+import api, { API_BASE } from '@/lib/api';
 import { io, type Socket } from 'socket.io-client';
 import type { User, Company } from '@/types';
 
@@ -78,7 +78,7 @@ export function CommunicationHub() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:5000';
+  const apiBase = API_BASE;
   const token = localStorage.getItem('sit_portal_token');
 
   const [searchQuery, setSearchQuery] = useState('');
