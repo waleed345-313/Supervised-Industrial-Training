@@ -1,9 +1,9 @@
 function resolveApiBase() {
   const raw = String(import.meta.env.VITE_API_BASE || '').trim().replace(/\/+$/, '');
-  return raw || 'http://localhost:5000';
+  return raw || 'https://sit-backend-nggb.onrender.com';
 }
 
-/** Backend origin. Local default is Express on port 5000. Production is set via VITE_API_BASE at build time. */
+/** Backend origin. Production is set via VITE_API_BASE at build time. */
 export const API_BASE = resolveApiBase();
 
 export function documentFilePublicUrl(relativeUrl: string) {
